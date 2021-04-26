@@ -87,12 +87,12 @@ const Image = struct {
             .colormapdepth = 0,
             .x_origin = 0,
             .y_origin = 0,
-            .width = 0,
-            .height = 0,
+            .width = @intCast(u16, self.width),
+            .height = @intCast(u16, self.height),
             .bitsperpixel = self.bytespp.toNumBits(),
             .imagedescriptor = 0,
         };
-        _ = try f.write(&@bitCast([18]u8, header));
+        try f.writeAll(&@bitCast([18]u8, header));
     }
 };
 
