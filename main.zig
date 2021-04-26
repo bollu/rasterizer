@@ -9,7 +9,15 @@ const Allocator = std.mem.Allocator;
 const fs = std.fs;
 
 const Format = enum {
-    RGB, RGBA
+    RGB,
+    RGBA,
+
+    pub fn toNumBits(self: Format) u8 {
+        return switch (self) {
+            Format.RGB => 3 * 8,
+            Format.RGBA => 4 * 8,
+        };
+    }
 };
 
 const Color = struct {
@@ -26,6 +34,21 @@ const Color = struct {
     pub fn rgba(r: u8, g: u8, b: u8, a: u8) Color {
         return Color{ .b = b, .g = g, .r = r, .a = a, .bytespp = 4 };
     }
+};
+
+const TGAHeader = packed struct {
+    idlength: u8,
+    colormaptype: u8,
+    datatypecode: u8,
+    colormaporigin: u16,
+    colormaplength: u16,
+    colormapdepth: u8,
+    x_origin: u16,
+    y_origin: u16,
+    width: u16,
+    height: u16,
+    bitsperpixel: u8,
+    imagedescriptor: u8,
 };
 
 const Image = struct {
@@ -50,14 +73,26 @@ const Image = struct {
         return;
     }
 
-    // https://gsquire.github.io/static/post/a-brief-exploration-of-zig/
+    // https://github.com/ssloy/tinyrenderer/blob/909fe20934ba5334144d2c748805690a1fa4c89f/tgaimage.cpp#L148
     pub fn write_tga_file(self: Image, name: []const u8) !void {
         // Note the `try` keyword here.
         var f = try fs.cwd().createFile(name, fs.File.CreateFlags{ .truncate = true });
-
-        // Note that Zig has `defer` like Go does.
-        // This way we know our file handle will be closed regardless of function flow.
         defer f.close();
+        var header = TGAHeader{
+            .idlength = 0,
+            .colormaptype = 0,
+            .datatypecode = 0,
+            .colormaporigin = 0,
+            .colormaplength = 0,
+            .colormapdepth = 0,
+            .x_origin = 0,
+            .y_origin = 0,
+            .width = 0,
+            .height = 0,
+            .bitsperpixel = self.bytespp.toNumBits(),
+            .imagedescriptor = 0,
+        };
+        _ = try f.write(&@bitCast([18]u8, header));
     }
 };
 
