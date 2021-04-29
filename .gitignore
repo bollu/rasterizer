@@ -1,3 +1,4 @@
 main
 zig-cache
 *.tga
+*.ppm

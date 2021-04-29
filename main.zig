@@ -55,7 +55,7 @@ const Image = struct {
     width: i32,
     height: i32,
     bytespp: Format,
-    data: []u8,
+    data: []Color,
 
     pub fn init(width: i32, height: i32, bytespp: Format) !Image {
         const allocator = std.heap.page_allocator;
@@ -64,51 +64,46 @@ const Image = struct {
             .width = width,
             .height = height,
             .bytespp = bytespp,
-            .data = try allocator.alloc(u8, @intCast(usize, width * height)),
+            .data = try allocator.alloc(Color, @intCast(usize, width * height)),
         };
     }
 
-    // s for set
-    pub fn s(self: Image, x: i32, y: i32, ix: Color) void {
-        return;
-    }
+    // s for set.
+    pub fn s(self: Image, x: i32, y: i32, color: Color) void { self.data[x*height+y] = color; }
+
+    // g for get.
+    pub fn g(self: Image, x: i32, y: i32) Color { return self.data[x*height+y]; }
 
     // https://github.com/ssloy/tinyrenderer/blob/909fe20934ba5334144d2c748805690a1fa4c89f/tgaimage.cpp#L148
-    pub fn write_tga_file(self: Image, name: []const u8) !void {
+    // https://github.com/bollu/smallpths/blob/cf91240b7f1db8f15e1567f724c1f97cad1f13d1/smallpt-hs.hs#L475-L479
+    pub fn write_ppm_file(self: Image, name: []const u8) !void {
         // Note the `try` keyword here.
         var f = try fs.cwd().createFile(name, fs.File.CreateFlags{ .truncate = true });
+        try f.outStream().print("P3\n {} {} {}\n", .{self.width, self.height, 255});
+
+        var x : i32 = 0; 
+        while (x < self.width) {
+            var y : i32 = 0; 
+            while(y < self.height) {
+                const c : Color = self.data[@intCast(usize, x*self.height+y)];
+                try f.outStream().print("{} {} {} ", .{255, 0, 0}); // .{c.r, c.g, c.b});
+                y += 1;
+            }
+            x += 1;
+        }
         defer f.close();
-        var header = TGAHeader{
-            .idlength = 0,
-            .colormaptype = 0,
-            .datatypecode = 0,
-            .colormaporigin = 0,
-            .colormaplength = 0,
-            .colormapdepth = 0,
-            .x_origin = 0,
-            .y_origin = 0,
-            .width = @intCast(u16, self.width),
-            .height = @intCast(u16, self.height),
-            .bitsperpixel = self.bytespp.toNumBits(),
-            .imagedescriptor = 0,
-        };
-        try f.writeAll(&@bitCast([18]u8, header));
+
+
     }
 };
 
 pub fn main() !void {
-    // const TGAColor white = TGAColor(255, 255, 255, 255);
-    // const TGAColor red   = TGAColor(255, 0,   0,   255);
-    // TGAImage image(100, 100, TGAImage::RGB);
-    // image.set(52, 41, red);
-    // image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
-    // image.write_tga_file("output.tga");
     const stdout = std.io.getStdOut().writer();
     const white = Color.rgba(255, 255, 255, 255);
     const red = Color.rgba(255, 0, 0, 255);
     var image = try Image.init(100, 100, Format.RGB);
     // image.s(52, 41, red);
     try stdout.print("Trying to write...\n", .{});
-    try image.write_tga_file("output.tga");
+    try image.write_ppm_file("output.ppm");
     try stdout.print("Hello, {s}!\n", .{"world"});
 }
