@@ -34,45 +34,41 @@ const Color = struct {
     pub fn rgba(r: u8, g: u8, b: u8, a: u8) Color {
         return Color{ .b = b, .g = g, .r = r, .a = a, .bytespp = 4 };
     }
+
+    pub fn rgb(r: u8, g: u8, b: u8) Color {
+        return Color{ .b = b, .g = g, .r = r, .a = 255, .bytespp = 4 };
+    }
 };
 
-const TGAHeader = packed struct {
-    idlength: u8,
-    colormaptype: u8,
-    datatypecode: u8,
-    colormaporigin: u16,
-    colormaplength: u16,
-    colormapdepth: u8,
-    x_origin: u16,
-    y_origin: u16,
-    width: u16,
-    height: u16,
-    bitsperpixel: u8,
-    imagedescriptor: u8,
-};
-
+// top-left is (0, 0)
 const Image = struct {
-    width: i32,
-    height: i32,
+    width: usize,
+    height: usize,
     bytespp: Format,
     data: []Color,
 
-    pub fn init(width: i32, height: i32, bytespp: Format) !Image {
+    pub fn init(width: usize, height: usize, bytespp: Format) !Image {
         const allocator = std.heap.page_allocator;
+        var black = try allocator.alloc(Color, @intCast(usize, width * height));
+        var i : usize = 0;
+        while(i < width * height) {
+            black[i] = Color.rgba(0, 0, 0, 0);
+            i += 1;
+        }
 
         return Image{
             .width = width,
             .height = height,
             .bytespp = bytespp,
-            .data = try allocator.alloc(Color, @intCast(usize, width * height)),
+            .data = black
         };
     }
 
     // s for set.
-    pub fn s(self: Image, x: i32, y: i32, color: Color) void { self.data[x*height+y] = color; }
+    pub fn s(self: Image, x: usize, y: usize, color: Color) void { self.data[x*self.height+y] = color; }
 
     // g for get.
-    pub fn g(self: Image, x: i32, y: i32) Color { return self.data[x*height+y]; }
+    pub fn g(self: Image, x: usize, y: usize) Color { return self.data[x*height+y]; }
 
     // https://github.com/ssloy/tinyrenderer/blob/909fe20934ba5334144d2c748805690a1fa4c89f/tgaimage.cpp#L148
     // https://github.com/bollu/smallpths/blob/cf91240b7f1db8f15e1567f724c1f97cad1f13d1/smallpt-hs.hs#L475-L479
@@ -81,12 +77,12 @@ const Image = struct {
         var f = try fs.cwd().createFile(name, fs.File.CreateFlags{ .truncate = true });
         try f.outStream().print("P3\n {} {} {}\n", .{self.width, self.height, 255});
 
-        var x : i32 = 0; 
+        var x : usize = 0; 
         while (x < self.width) {
-            var y : i32 = 0; 
+            var y : usize = 0; 
             while(y < self.height) {
-                const c : Color = self.data[@intCast(usize, x*self.height+y)];
-                try f.outStream().print("{} {} {} ", .{255, 0, 0}); // .{c.r, c.g, c.b});
+                const c : Color = self.data[x+y*self.width];
+                try f.outStream().print("{} {} {} ", .{c.r, c.g, c.b});
                 y += 1;
             }
             x += 1;
@@ -102,6 +98,11 @@ pub fn main() !void {
     const white = Color.rgba(255, 255, 255, 255);
     const red = Color.rgba(255, 0, 0, 255);
     var image = try Image.init(100, 100, Format.RGB);
+    var i : usize = 0;
+    while(i < 25) {
+        image.s(i, i, Color.rgb(255, 0, 0));
+        i += 1;
+    }
     // image.s(52, 41, red);
     try stdout.print("Trying to write...\n", .{});
     try image.write_ppm_file("output.ppm");
