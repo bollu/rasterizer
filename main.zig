@@ -103,7 +103,7 @@ fn line(x0: i32, y0:i32, x1:i32, y1:i32, color: Color, image: *Image) !void {
          while(x <= xr) {
              image.s(x, y, color);
              x += 1;
-             m += M;
+             m += std.math.fabs(M);
              while (m >= 1) { y += sgn(i32, yr - yl); m -= 1; }
          }
          
@@ -122,7 +122,7 @@ fn line(x0: i32, y0:i32, x1:i32, y1:i32, color: Color, image: *Image) !void {
          while(y <= yt) {
              image.s(x, y, color);
              y += 1;
-             m += M;
+             m += std.math.fabs(M);
              while (m >= 1) { x += sgn(i32, xt - xb); m -= 1; }
          }
 
@@ -143,7 +143,7 @@ pub fn main() !void {
 
     var i : i32 = 0;
     while(i < 360) {
-        i += 2;
+        i += 1;
         const theta : f32 = @intToFloat(f32, i) / 3.14;
         try line(300, 300, 
             300 + @floatToInt(i32, 250 * std.math.cos(theta)), 
