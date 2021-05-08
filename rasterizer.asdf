@@ -1,0 +1,3 @@
+;; https://common-lisp.net/project/asdf/asdf.html#Loading-ASDF
+(defsystem "rasterizer"
+   :components ((:file "ch1")))
