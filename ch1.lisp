@@ -44,6 +44,8 @@
   (v2 (* c (elt v 0))
       (* c (elt v 1))))
 
+(defun v2floor (v)
+  (v2 (floor (v2->x v)) (floor (v2->y v))))
 
 ;; turn on a pixel
 (defun color-pixel (img p)
@@ -78,26 +80,36 @@
   (+ (* (- 1 time) start)
      (* time end)))
 
-;; assumption: delta x > delta y
+;; assumption: delta x > delta y, x1 > x0
 (defun plot-line-low (x0 y0 x1 y1)
   (loop for xcur from x0 to x1
-        for xt =  (/ (- xcur x0) (- x1 x0))
-        collect (list xcur (floor (lerp xt y0 y1)))))
+	for xt = (/ (- xcur x0) (- x1 x0))
+	collect (list xcur (floor (lerp xt y0 y1)))))
+
+;; assumption: delta y > delta x, y1 > y0
+(defun plot-line-high (x0 y0 x1 y1)
+  (loop for ycur from y0 to y1
+	for yt = (/ (- ycur y0) (- y1 y0))
+	collect (list (floor (lerp yt x0 x1)) ycur)))
 
 (defun plot-line (p q)
   (let ((Dx (abs (- (v2->x p) (v2->x q))))
 	(Dy (abs (- (v2->y p) (v2->y q)))))
     (if (> Dx Dy)
-	(plot-line-low (v2->x p) (v2->y p) (v2->x q) (v2->y q))
-	(plot-line-low (v2->y p) (v2->x p) (v2->y q) (v2->x q)))))
+	(if (< (v2->x p) (v2->x q)) ;; from smaller x -> larger x
+	    (plot-line-low (v2->x p) (v2->y p) (v2->x q) (v2->y q))
+	    (plot-line-low (v2->x q) (v2->y q) (v2->x p) (v2->y p)))
+	(if (< (v2->y p) (v2->y q)) ;; smaller y -> larger y
+	    (plot-line-high (v2->x p) (v2->y p) (v2->x q) (v2->y q))
+	    (plot-line-high (v2->x q) (v2->y q) (v2->x p) (v2->y p))))))
 
 (defun polar-project (c r theta)
-  (v2+ c (v2 (* r (cos theta))
-	     (* r (sin theta)))))
+  (v2floor (v2+ c (v2 (* r (cos theta))
+		      (* r (sin theta))))))
 
 ;; entry point for chapter 1
 (defun ch1-main ()
   (let ((img (make-array (list +w+ +h+) :initial-element 0.5)))
-    (loop for theta from 0 to 6.14 by 0.1
-	  do (color-pixels img (plot-line +c+ (polar-project +c+ +r+ theta))))
+    (loop for theta from 0 to 6.2 by 0.1
+	  do (color-pixels img (plot-line +c+ (v2floor (polar-project +c+ +r+ theta)))))
     (write-img-to-file img "out-ch1.ppm")))
