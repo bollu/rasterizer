@@ -30,10 +30,22 @@
 (defun v3x (p q)
   (defun component (f g c d)
     (-  (*  (funcall f c) (funcall g d))
-	(* (funcall f d) (funcall g c))))
+	(* (funcall g c) (funcall f d))))
   (v3 (component #'v3->y #'v3->z p q)
-      (component #'v3->x #'v3->z p q)
+      (component #'v3->z #'v3->x p q)
       (component #'v3->x #'v3->y p q)))
+
+(v3x (v3 1 0 0) (v3 1 0 0))
+(v3x (v3 1 0 0) (v3 0 1 0))
+(v3x (v3 1 0 0) (v3 0 0 1))
+
+(v3x (v3 0 1 0) (v3 1 0 0))
+(v3x (v3 0 1 0) (v3 0 1 0))
+(v3x (v3 0 1 0) (v3 0 0 1))
+
+(v3x (v3 0 0 1) (v3 1 0 0))
+(v3x (v3 0 0 1) (v3 0 1 0))
+(v3x (v3 0 0 1) (v3 0 0 1))
 
 (defun v2 (x y) (vector x y))
 
@@ -59,10 +71,10 @@
 (defun v2floor (v)
   (v2 (floor (v2->x v)) (floor (v2->y v))))
 
-;; P = A + uAB + vBC
-;; 0 = (A - P) + uAB + vBC
-;; 0 = PA + uAB + vBC
-;; 0 = (PA, AB, BC)^T (u, v, 1)
+;; P = A + uAB + vAC
+;; 0 = (A - P) + uAB + vAC
+;; 0 = PA + uAB + vAC
+;; 0 = (PA, AB, AC)^T (u, v, 1)
 ;; These are two eqns:
 ;; ------------------
 ;; 0 = (PAx, ABx, BCx) . (u, v, 1)
@@ -70,22 +82,28 @@
 
 (defun v3bary (tri p)
   (let* ((a (v3->x tri))
-	(b (v3->y tri))
-	(c (v3->z tri))
-	(pa (v2- a p))
-	(ab (v2- b a))
-	(bc (v2- c b))
-	(orth (list pa ab bc))
-	(crossv  (funcall #'v3x
-			  (mapcar #'v2->x orth)
-			  (mapcar #'v2->y orth))))
-    (if (<  (abs (v3->z crossv)) 1)
+	 (b (v3->y tri))
+	 (c (v3->z tri))
+	 (pa (v2- a p))
+	 (ab (v2- b a))
+	 (ac (v2- c a))
+	 (orth (list ac ab pa))
+	 (crossv  (funcall #'v3x
+			   (mapcar #'v2->x orth)
+			   (mapcar #'v2->y orth)))
+	 (u (v3->x crossv))
+	 (v (v3->y crossv))
+	 (w (v3->z crossv)))
+    
+    (if (<  (abs w) 1)
 	(v3 -1 1 1)
-	(v3 (- 1 (/ (+ (v3->x crossv) (v3->y crossv)) (v3->z crossv)))
-	    (/ (v3->y crossv) (v3->z crossv))
-	    (/ (v3->x crossv) (v3->z crossv))))))
+	(v3 (- 1 (/ (+ u v) w))
+	    (/ v w)
+	    (/ u  w)))))
 
-(v3bary (list '(3 0 0) '(0 3 0) '(0 0 3)) '(1 1 1))
+(v3bary (list '(3 0 0) '(0 3 0) '(0 0 3)) '(3 0 0))
+(v3bary (list '(3 0 0) '(0 3 0) '(0 0 3)) '(0 3 0))
+(v3bary (list '(3 0 0) '(0 3 0) '(0 0 3)) '(0 0 3))
 
 
 ;; turn on a pixel
