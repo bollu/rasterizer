@@ -12,12 +12,12 @@
 ;; to change package, use ", set package"
 (declaim (optimize (speed 0) (safety 3) (debug 3)))
 (defpackage :ch1 (:use :common-lisp))
-
+;; for uiop
+(require :asdf)
 (in-package ch1)
 
-(defparameter +w+ 800)
-(defparameter +h+ 600)
-
+(defparameter +w+ 500)
+(defparameter +h+ 500)
 (defparameter +r+ 100)
 (defparameter +c+ (vector (/ +w+ 2) (/ +h+ 2)))
 
@@ -44,55 +44,60 @@
   (v2 (* c (elt v 0))
       (* c (elt v 1))))
 
-(defvar *img* (make-array (list +w+ +h+) :initial-element 0.0))
-
 
 ;; turn on a pixel
-(defun color-pixel (p)
-  (setf (aref *img* (v2->x p) (v2->y p)) 1.0))
+(defun color-pixel (img p)
+  (setf (aref img (v2->x p) (v2->y p)) 1.0))
 
 ;; turn on pixels
-(defun color-pixels (ps) (loop for p in ps do (color-pixel p)))
+(defun color-pixels (img ps) (loop for p in ps do (color-pixel img p)))
 
-(defun img-to-str ()
-  (loop for xcur from 0 below +w+
-        do (loop for ycur from 0 below +h+
-                 for color = (aref *img* xcur ycur)
-                 do (with-output-to-string (str)
-                        (format str "~a ~a ~a" color color color)))))
+(defun img-to-str (img)
+   (with-output-to-string (str)
+     (format str  "P3 ~d ~d 255 " +w+ +h+)
+     (loop for xcur from 0 below +w+
+	   do (loop for ycur from 0 below +h+
+		    for color = (floor (* 255 (aref img xcur ycur)))
+		    do (format str "~a ~a ~a " color color color)))))
 
-(defun write-img-to-file (path)
-  (with-open-file (f path :direction :output)
-    (write (format NIL  "~d ~d" +w+ +h+))
-    (write (img-to-str))))
+(defun write-img-to-file (img relative-file-path)
+  (let ((full-path (merge-pathnames (uiop:getcwd) relative-file-path)))
+    (format t "writing image to path |~a|..." full-path)
+    (with-open-file (f full-path
+		       :direction :output
+		       :if-exists :supersede
+		       :if-does-not-exist :create)
+      (format f (img-to-str img)))
+    (format t " done writing image.")))
+
 
 ;; assumption x0 < x1
 ;; assumption dx > dy
 ;; https://github.com/ssloy/tinyrenderer/wiki/Lesson-1:-Bresenham%E2%80%99s-Line-Drawing-Algorithm#third-attempt
-
 (defun lerp (time start end)
   (+ (* (- 1 time) start)
      (* time end)))
 
-
 ;; assumption: delta x > delta y
 (defun plot-line-low (x0 y0 x1 y1)
-    (loop for xcur from x0 to x1
-          for xt =  (/ (- xcur x0) (- x1 x0))
-          collect (list xcur (lerp xt y0 y1))))
+  (loop for xcur from x0 to x1
+        for xt =  (/ (- xcur x0) (- x1 x0))
+        collect (list xcur (floor (lerp xt y0 y1)))))
 
 (defun plot-line (p q)
   (let ((Dx (abs (- (v2->x p) (v2->x q))))
-        (Dy (abs (- (v2->y p) (v2->y q)))))
+	(Dy (abs (- (v2->y p) (v2->y q)))))
     (if (> Dx Dy)
-        (plot-line-low (v2->x p) (v2->y p) (v2->x q) (v2->y q))
-        (plot-line-low (v2->y p) (v2->x p) (v2->y q) (v2->x q)))))
-
+	(plot-line-low (v2->x p) (v2->y p) (v2->x q) (v2->y q))
+	(plot-line-low (v2->y p) (v2->x p) (v2->y q) (v2->x q)))))
 
 (defun polar-project (c r theta)
   (v2+ c (v2 (* r (cos theta))
-             (* r (sin theta)))))
+	     (* r (sin theta)))))
 
-(loop for theta from 0 to 6.14
-    do (plot-line +c+ (polar-project +c+ +r+ theta)))
-(write-img-to-file "out-ch1.ppm")
+;; entry point for chapter 1
+(defun ch1-main ()
+  (let ((img (make-array (list +w+ +h+) :initial-element 0.5)))
+    (loop for theta from 0 to 6.14 by 0.1
+	  do (color-pixels img (plot-line +c+ (polar-project +c+ +r+ theta))))
+    (write-img-to-file img "out-ch1.ppm")))
