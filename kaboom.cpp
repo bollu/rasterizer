@@ -21,9 +21,9 @@ struct Vec3T {
       double len = std::sqrt(lensq);
       return len;
   }
-  Vec3T normalize() const {
+  Vec3T normalize(double newlen=1) const {
       const double len = norm();
-      return Vec3T(x/len, y/len, z/len);
+      return Vec3T(x*newlen/len, y*newlen/len, z*newlen/len);
   }
 
   float operator() (int i) {
@@ -42,7 +42,7 @@ ostream &operator << (ostream &o, Vec3T<T> v) {
 }
 
 template<typename T>
-Vec3T<T> operator *(const Vec3T<T> v, const T f) {
+Vec3T<T> operator *(const Vec3T<T> v, const double f) {
     return Vec3T<T>(v.x*f, v.y*f, v.z*f);
 }
 
@@ -68,9 +68,56 @@ using Vec3f = Vec3T<float>;
 
 
 const float sphere_radius   = 1.5;
+const float noise_amplitude = 1;
+
+
+template <typename T> inline T lerp(const T &v0, const T &v1, float t) {
+    return v0 + (v1-v0)*std::max(0.f, std::min(1.f, t));
+}
+
+// what is this hash function, lol?
+float hashfn(const float n) {
+    float x = sin(n)*43758.5453f;
+    return x-floor(x);
+}
+
+// this suuposedly generates perlin noise.
+float noise(const Vec3f &x) {
+    Vec3f p(floor(x.x), floor(x.y), floor(x.z)); //floor v
+    Vec3f f(x.x-p.x, x.y-p.y, x.z-p.z); // fractional part of v
+    f = f*(f*(Vec3f(3.f, 3.f, 3.f)-f*2.f)); // no idea mate.
+    float n = p*Vec3f(1.f, 57.f, 113.f);
+    return lerp(lerp(
+                     lerp(hashfn(n +  0.f), hashfn(n +  1.f), f.x),
+                     lerp(hashfn(n + 57.f), hashfn(n + 58.f), f.x), f.y),
+                lerp(
+                    lerp(hashfn(n + 113.f), hashfn(n + 114.f), f.x),
+                    lerp(hashfn(n + 170.f), hashfn(n + 171.f), f.x), f.y), f.z);
+}
+
+// rotate by some angle, not sure what angle.
+Vec3f rotate(const Vec3f &v) {
+    return Vec3f(Vec3f(0.00,  0.80,  0.60)*v, Vec3f(-0.80,  0.36, -0.48)*v, Vec3f(-0.60, -0.48,  0.64)*v);
+}
+
+float fractal_brownian_motion(const Vec3f &x) {
+    Vec3f p = rotate(x);
+    float f = 0;
+    f += 0.5000*noise(p); p = p*2.32;
+    f += 0.2500*noise(p); p = p*3.03;
+    f += 0.1250*noise(p); p = p*2.61;
+    f += 0.0625*noise(p);
+    return f/0.9375;
+}
 
 float signed_distance(const Vec3f &p) {
-    return p.norm() - sphere_radius;
+
+    auto g = [](Vec3f p) {
+        return -fractal_brownian_motion(p*3.4);
+        // return (sin(16*p.x)*sin(16*p.y)*sin(16*p.z) + 1.)/2.;
+    };
+
+    return p.norm() - (sphere_radius + noise_amplitude* g(p.normalize(sphere_radius)));
 }
 
 bool sphere_trace(const Vec3f &orig, const Vec3f &dir, Vec3f &pos) {
@@ -114,8 +161,10 @@ int main() {
 
             if (sphere_trace(Vec3f(0, 0, 3), Vec3f(dir_x, dir_y, dir_z).normalize(), hit)) { // the camera is placed to (0,0,3) and it looks along the -z axis
                 // | one light is placed to (10,10,10)
-                Vec3f light_dir = (Vec3f(10, 10, 10) - hit).normalize(); 
-                float light_intensity  = std::max(0.4f, light_dir*distance_field_normal(hit));
+                const Vec3f light_dir = (Vec3f(10, 10, 10) - hit).normalize(); 
+                const float light_intensity  = std::max(0.4f, light_dir*distance_field_normal(hit));
+                // const float displacement = g(hit);
+                // framebuffer[i+j*width] = Vec3f(1, 1, 1)*displacement*light_intensity;
                 framebuffer[i+j*width] = Vec3f(1, 1, 1)*light_intensity;
             } else {
                 framebuffer[i+j*width] = Vec3f(0.2, 0.7, 0.8); // background color
