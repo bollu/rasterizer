@@ -47,6 +47,18 @@ Vec3T<T> operator *(const Vec3T<T> v, const T f) {
 }
 
 template<typename T>
+Vec3T<T> operator - (const Vec3T<T> v, const Vec3T<T> w) {
+    return Vec3T<T>(v.x - w.x, v.y - w.y, v.z - w.z);
+}
+
+
+template<typename T>
+float operator *(const Vec3T<T> v, const Vec3T<T> w) {
+    return v.x*w.x +  v.y*w.y + v.z*w.z;
+}
+
+
+template<typename T>
 Vec3T<T> operator +(const Vec3T<T> v, const Vec3T<T> w) {
     return Vec3T<T>(v.x + w.x, v.y + w.y, v.z + w.z);
 }
@@ -71,6 +83,21 @@ bool sphere_trace(const Vec3f &orig, const Vec3f &dir, Vec3f &pos) {
     return false;
 }
 
+
+// find normal to SDF
+// recall that normal to level set f(x) = 0 is grad f!
+// compute grad by finite difference.
+Vec3f distance_field_normal(const Vec3f &pos) {
+    const float eps = 0.1;
+    float d = signed_distance(pos);
+    float nx = signed_distance(pos + Vec3f(eps, 0, 0)) - d;
+    float ny = signed_distance(pos + Vec3f(0, eps, 0)) - d;
+    float nz = signed_distance(pos + Vec3f(0, 0, eps)) - d;
+    return Vec3f(nx, ny, nz).normalize();
+}
+
+
+
 int main() {
     const int   width    = 640;
     const int   height   = 480;
@@ -84,8 +111,12 @@ int main() {
             float dir_y = -(j + 0.5) + height/2.;    // this flips the image at the same time
             float dir_z = -height/(2.*tan(fov/2.));
             Vec3f hit;
+
             if (sphere_trace(Vec3f(0, 0, 3), Vec3f(dir_x, dir_y, dir_z).normalize(), hit)) { // the camera is placed to (0,0,3) and it looks along the -z axis
-                framebuffer[i+j*width] = Vec3f(1, 1, 1);
+                // | one light is placed to (10,10,10)
+                Vec3f light_dir = (Vec3f(10, 10, 10) - hit).normalize(); 
+                float light_intensity  = std::max(0.4f, light_dir*distance_field_normal(hit));
+                framebuffer[i+j*width] = Vec3f(1, 1, 1)*light_intensity;
             } else {
                 framebuffer[i+j*width] = Vec3f(0.2, 0.7, 0.8); // background color
             }
