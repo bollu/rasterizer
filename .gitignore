@@ -1,4 +1,5 @@
 *.fasl
+*.out
 main
 zig-cache
 *.tga

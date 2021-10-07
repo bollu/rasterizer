@@ -1,7 +1,5 @@
-.PHONY: run
+.PHONY: run 
 
-run: main
-	./main
+rasterizer.out: main.cpp
+	clang++ -Wall -Werror -std=c++17 main.cpp -o rasterizer.out
 
-main: main.zig
-	zig build-exe main.zig -femit-llvm-ir
