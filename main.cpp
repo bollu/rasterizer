@@ -9,6 +9,17 @@
 using namespace std;
 using ll = long long;
 
+template<typename T>
+std::ostream &operator << (std::ostream &o, const vector<T> &vs) {
+  o << "[";
+  for(int i = 0; i < vs.size(); ++i) {
+    if (i > 0) { o << " "; } 
+    o << vs[i];
+  }
+  return o << "]";
+}
+
+
 // L for location
 struct Loc {
   ll si, line, col;
@@ -77,7 +88,6 @@ struct Tokenizer {
       : len(len), data(data), loc(Loc::beginning_of_file()) {}
 
   bool eof() {
-    eat_whitespace();
     return loc.si >= len;
   }
 
@@ -95,10 +105,12 @@ struct Tokenizer {
     eat_whitespace();
     assert(!eof());
     string out;
-    while(!eof()) {
-      if (ispeek("\n") || ispeek("\t") || ispeek(" ") || ispeek("/")) { break; }
-      out += data[loc.si];
-      advance1();
+    while(1) {
+      if (loc.si >= len) { break; }
+      char c = data[loc.si];
+      if (c == '\n' ||  c == '\t' || c == ' ' || c == '/') { break; }
+      out += c;
+      loc = loc.next(c);
     }
     return out;
   };
@@ -135,6 +147,7 @@ private:
     if (loc.si  + s.size() >= len) {
       return false;
     }
+
     for(int i = 0; i < s.size(); ++i) {
       if (data[loc.si + i] != s[i]) { return false; }
     }
@@ -151,12 +164,6 @@ private:
 
   void eat_whitespace() {
     while (1) {
-      // if (ispeek("#")) {
-      //   consume("#");
-      //   while (!eof() && !ispeek("#")) {
-      //     advance1();
-      //   }
-      //
       if (ispeek(" ")) {
         consume(" ");
       } else if (ispeek("\t")) {
@@ -189,13 +196,18 @@ using Vec2i = Vec2<int>;
 
 
 template<typename T>
-struct vec3T { 
+struct Vec3T { 
   T x, y, z;
-  vec3T(T x, T y, T z): x(x), y(y), z(z) {}
+  Vec3T(T x, T y, T z): x(x), y(y), z(z) {}
 };
 
-using Vec3i = vec3T<int>;
-using Vec3f = vec3T<float>;
+template<typename T>
+ostream &operator << (ostream &o, Vec3T<T> v) {
+  return o << "v3(" << v.x << "  " << v.y << " " << v.z << ")";
+}
+
+using Vec3i = Vec3T<int>;
+using Vec3f = Vec3T<float>;
 
 struct Color {
   int r, g, b;
@@ -275,18 +287,23 @@ Model parse_model(const char *file) {
   Model model;
   while(!t.eof()) {
     std::string s = t.consumetok(); 
+    cout << s << "\n";
+
     if (s == "v") {
       std::string x, y, z;
       x = t.consumetok();
       y = t.consumetok();
       z = t.consumetok();
-      model.verts.push_back(Vec3f(atof(x.c_str()), atof(y.c_str()), atof(z.c_str())));
+      Vec3f vec = Vec3f(atof(x.c_str()), atof(y.c_str()), atof(z.c_str()));
+      // cout << "vec: " << vec << "\n"; getchar();
+      model.verts.push_back(vec);
     } else if (s == "f") {
       std::string trash;
       std::string fx = t.consumetok(); t.consume("/"); trash = t.consumetok(); t.consume("/"); t.consumetok();
       std::string fy = t.consumetok(); t.consume("/"); trash = t.consumetok(); t.consume("/"); t.consumetok();
       std::string fz = t.consumetok(); t.consume("/"); trash = t.consumetok(); t.consume("/"); t.consumetok();
       vector<int> face { atoi(fx.c_str()), atoi(fy.c_str()), atoi(fz.c_str()) };
+      cout << "face: " << face << "\n"; getchar();
       model.faces.push_back(face);
     } else {
       t.consume_line();
@@ -310,8 +327,8 @@ void line(Vec2i begin, Vec2i end, Color color, Image &img) {
   }
 
   for(int x = begin.x; x <= end.x; x++) {
-    float t = (x - begin.x) / (end.x - begin.x); // lerp value
-    int y = begin.y * (1. - t) + end.y * t;
+    float t = (x - begin.x) / (float)(end.x - begin.x); // lerp value
+    int y = begin.y * (1.0 - t) + end.y * t;
     if (transposed) {
       img(y, x) = color;
     } else {
@@ -327,8 +344,11 @@ const int height = 800;
 void chapter1() {
   Model model = parse_model("./obj/african_head/african_head.obj");
   Image image(width, height, Color::darkgray());
+  cout << "model has |" << model.verts.size() << "| vertices\n";
+  cout << "model has |" << model.faces.size() << "| faces\n";
   for(int f = 0; f < model.faces.size(); ++f) {
     vector<int> face = model.faces[f];
+    cout << "have face: " << face << " | ";
     for(int j = 0; j < 3; ++j) {
       Vec3f v0 = model.verts[face[j]];
       Vec3f v1 = model.verts[face[(j+1)%3]];
@@ -338,6 +358,7 @@ void chapter1() {
       int y1 = (v1.y+1.)*height/2.;
       line(Vec2i(x0, y0), Vec2i(x1, y1), Color::white(), image);
     }
+    cout << "\n";
   }
 
   write_image_to_ppm(image, "chapter1.ppm");
