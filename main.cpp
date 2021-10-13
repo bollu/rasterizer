@@ -202,6 +202,11 @@ struct Vec2 {
 };
 using Vec2i = Vec2<int>;
 
+template<typename T>
+ostream &operator << (ostream &o, Vec2<T> v) {
+  return o << "v2(" << v.x << "  " << v.y << ")";
+}
+
 
 template<typename T>
 struct Vec3T { 
@@ -310,10 +315,11 @@ Model parse_model(const char *file) {
       std::string fx = t.consumetok(); t.consume("/"); trash = t.consumetok(); t.consume("/"); t.consumetok();
       std::string fy = t.consumetok(); t.consume("/"); trash = t.consumetok(); t.consume("/"); t.consumetok();
       std::string fz = t.consumetok(); t.consume("/"); trash = t.consumetok(); t.consume("/"); t.consumetok();
-      vector<int> face { atoi(fx.c_str()), atoi(fy.c_str()), atoi(fz.c_str()) };
+      vector<int> face { atoi(fx.c_str())-1, atoi(fy.c_str())-1, atoi(fz.c_str())-1 };
       // cout << "face: " << face << "\n"; getchar();
       model.faces.push_back(face);
     } else {
+      cout << "ignoring line: " << s << "\n";
       t.consume_line();
     }
   }
@@ -321,7 +327,8 @@ Model parse_model(const char *file) {
 };
 
 void line(Vec2i begin, Vec2i end, Color color, Image &img) {
-  Vec2i d = (begin - end).abs();
+  cout << "line(" << begin << " " << end << ")";
+  Vec2i d = (end - begin).abs();
   bool transposed = false;
   // line has slope > 1, make it slope < 1, so that we need more than 1 δx to see a δy
   if (d.x < d.y) {
@@ -334,19 +341,20 @@ void line(Vec2i begin, Vec2i end, Color color, Image &img) {
     std::swap(begin, end);
   }
 
-  if (begin.x == end.x) { return; }
+  cout << " -> " << begin << " " << end << "\n";
+
   for(int x = begin.x; x <= end.x; x++) {
-    cout << "x:" << begin.x << " -[" << x << "]-> " << end.x << " | ";
-    float t = (x - begin.x) / (float)(end.x - begin.x); // lerp value
-    int y = begin.y * (1.0 - t) + end.y * t;
-    cout << "out " << x << "  " << y << "| transposed?" << transposed << "\n";
+    const float t = (x - begin.x) / (float)(end.x - begin.x); // lerp value
+    const int y = begin.y * (1.0 - t) + end.y * t;
+
     int outx = x;
     int outy = y;
     if (transposed) {
       std::swap(outx, outy);
     } 
-    outx = clamp<int>(0, x, img.w - 1);
-    outy = clamp<int>(0, y, img.h - 1);
+
+    outx = clamp<int>(0, outx, img.w - 1);
+    outy = clamp<int>(0, outy, img.h - 1);
     img(outx, outy) = color;
   }
 }
@@ -357,15 +365,21 @@ const int height = 200;
 
 void chapter1() {
   Model model = parse_model("./obj/african_head/african_head.obj");
+  // Model model = parse_model("./obj/tri.obj");
   Image image(width, height, Color::darkgray());
   cout << "model has |" << model.verts.size() << "| vertices\n";
   cout << "model has |" << model.faces.size() << "| faces\n";
   for(int f = 0; f < model.faces.size(); ++f) {
     vector<int> face = model.faces[f];
-    cout << "have face: " << face << " | ";
+    cout << "have face: " << face << " {";
     for(int j = 0; j < 3; ++j) {
-      Vec3f v0 = model.verts[face[j]];
-      Vec3f v1 = model.verts[face[(j+1)%3]];
+      cout << model.verts[face[j]] << " ";
+    }
+    cout << "}\n";
+
+    for(int j = 0; j < 3; ++j) {
+      const Vec3f v0 = model.verts[face[j]];
+      const Vec3f v1 = model.verts[face[(j+1)%3]];
       int x0 = (v0.x+1.)*width/2.;
       int y0 = (v0.y+1.)*height/2.;
       int x1 = (v1.x+1.)*width/2.;
@@ -375,8 +389,7 @@ void chapter1() {
     cout << "\n";
   }
 
-  write_image_to_ppm(image, "chapter1.ppm");
-
+  write_image_to_ppm(image, "out.ppm");
 
 }
 

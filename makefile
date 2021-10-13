@@ -2,8 +2,9 @@
 
 
 rasterizer: rasterizer.out
-	./rasterizer.out
-	rifle chapter1.ppm
+	rm out.ppm
+	./rasterizer.out || true # disable leansan causing failure
+	rifle out.ppm
 
 kaboom: kaboom.out
 	./kaboom.out
