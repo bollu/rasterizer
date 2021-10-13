@@ -146,8 +146,8 @@ Vec3f distance_field_normal(const Vec3f &pos) {
 
 
 int main() {
-    const int   width    = 640;
-    const int   height   = 480;
+    const int   width    = 128;
+    const int   height   = 128;
     const float fov      = M_PI/3.;
     std::vector<Vec3f> framebuffer(width*height);
 

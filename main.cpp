@@ -9,6 +9,14 @@
 using namespace std;
 using ll = long long;
 
+
+template<typename T>
+T clamp(int small, int cur, int large) {
+  if (cur > large) { return large; }
+  if (cur < small) { return small; }
+    return cur; 
+}
+
 template<typename T>
 std::ostream &operator << (std::ostream &o, const vector<T> &vs) {
   o << "[";
@@ -303,7 +311,7 @@ Model parse_model(const char *file) {
       std::string fy = t.consumetok(); t.consume("/"); trash = t.consumetok(); t.consume("/"); t.consumetok();
       std::string fz = t.consumetok(); t.consume("/"); trash = t.consumetok(); t.consume("/"); t.consumetok();
       vector<int> face { atoi(fx.c_str()), atoi(fy.c_str()), atoi(fz.c_str()) };
-      cout << "face: " << face << "\n"; getchar();
+      // cout << "face: " << face << "\n"; getchar();
       model.faces.push_back(face);
     } else {
       t.consume_line();
@@ -326,20 +334,26 @@ void line(Vec2i begin, Vec2i end, Color color, Image &img) {
     std::swap(begin, end);
   }
 
+  if (begin.x == end.x) { return; }
   for(int x = begin.x; x <= end.x; x++) {
+    cout << "x:" << begin.x << " -[" << x << "]-> " << end.x << " | ";
     float t = (x - begin.x) / (float)(end.x - begin.x); // lerp value
     int y = begin.y * (1.0 - t) + end.y * t;
+    cout << "out " << x << "  " << y << "| transposed?" << transposed << "\n";
+    int outx = x;
+    int outy = y;
     if (transposed) {
-      img(y, x) = color;
-    } else {
-      img(x, y) = color;
-    }
+      std::swap(outx, outy);
+    } 
+    outx = clamp<int>(0, x, img.w - 1);
+    outy = clamp<int>(0, y, img.h - 1);
+    img(outx, outy) = color;
   }
 }
 
 // Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
-const int width  = 800;
-const int height = 800;
+const int width  = 200;
+const int height = 200;
 
 void chapter1() {
   Model model = parse_model("./obj/african_head/african_head.obj");
