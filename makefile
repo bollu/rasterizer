@@ -2,7 +2,7 @@
 
 
 rasterizer: rasterizer.out
-	rm out.ppm
+	-rm out.ppm
 	./rasterizer.out || true # disable leansan causing failure
 	rifle out.ppm
 

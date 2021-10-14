@@ -6,6 +6,7 @@
 #include <optional>
 #include <string.h>
 
+
 using namespace std;
 using ll = long long;
 
@@ -192,16 +193,26 @@ template<typename T>
 struct Vec2 { 
   T x, y;
   Vec2() : x(0), y(0) {}
-  Vec2(int x, int y) : x(x) , y(y) {}
+  Vec2(T x, T y) : x(x) , y(y) {}
   Vec2 abs() const {
     return Vec2(::abs(x), ::abs(y));
   }
 
-    Vec2<T> operator - (Vec2<T> other) {
-      return Vec2<T>(x - other.x, y - other.y);
-    }
+  Vec2<T> operator - (Vec2<T> other) {
+    return Vec2<T>(x + other.x, y + other.y);
+  }
+
+  Vec2<T> operator + (Vec2<T> other) {
+    return Vec2<T>(x - other.x, y - other.y);
+  }
+
+  Vec2<T> operator * (float f) {
+    return Vec2<T>(x * f, y * f);
+  }
+
 };
 using Vec2i = Vec2<int>;
+using Vec2f = Vec2<float>;
 
 template<typename T>
 ostream &operator << (ostream &o, Vec2<T> v) {
@@ -280,7 +291,7 @@ void write_image_to_ppm(Image &img, const char *fpath) {
       const int iy = img.h - 1 - fy; // coordinate system change
       const int ix = fx;
       const Color c = img(ix, iy);
-      fprintf(f, "%d %d %d\n", c.r , c.g, c.b);
+      fprintf(f,"%d %d %d\n", c.r , c.g, c.b);
     }
   }
   fclose(f);
@@ -401,18 +412,103 @@ const int height = 200;
 }
 
 
+// 2d axis aligned bounding box
+template<typename T>
+struct AABB2 {
+  Vec2<T> topleft;
+  Vec2<T> bottomright;
+
+  AABB2() {}
+
+  AABB2<T> add_point(Vec2<T> p) {
+    AABB2<T> out = *this;
+    out.topleft.x = min<T>(out.topleft.x, p.x);
+    out.bottomright.x = max<T>(out.bottomright.x, p.x);
+
+    out.topleft.y = min<T>(out.topleft.y, p.y);
+    out.bottomright.y = max<T>(out.bottomright.y, p.y);
+    return out;
+  }
+};
+
+Vec3f bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
+  const Vec2i w1 = v1 - v3;
+  const Vec2i w2 = v2 - v3;
+
+
+
+  // [w1.x w2.x] [b1] = [out.x - v3.x]
+  // [w1.y w2.y] [b2] = [out.y - v3.y]
+    
+  // b1 (w1.x) + b2 (w2.x) = out.x - v3.x
+  // b1 (v1.x - v3.x) + b2(v2.x - v3.x) = (out.x - v3.x)
+  // b1 v1.x  + b2 v2.x (- b1 - b2 + 1) v3.x = out.x
+  
+
+  // o := [out.x - v3.x]
+  //      [out.y - v3.y]
+  const Vec2f o = Vec2f(out.x - v3.x, out.y - v3.y);
+
+  // A
+  // --
+  // [w1.x w2.x]
+  // [w1.y w2.y]
+  const float det = w1.x * w2.y - w1.y * w2.x;
+  const float detinv = 1.0 / (float)det;
+  
+  // adjoint = cofactor(A)^T
+
+  // cofactor:
+  // ---------
+  // [w2.y -w1.y]
+  // [-w2.x w1.x]
+
+  // adj := cofactor^T:
+  // ------------------
+  // [w2.y -w2.x]
+  // [-w1.y w1.x]
+
+  // [b1] = [w2.y -w2.x] [o.x] / det(A)
+  // [b2] = [-w1.y w1.x] [o.y] / det(A)
+  
+
+  const Vec2f bs = Vec2f(float(w2.y * o.x - w2.x * o.y) * detinv, 
+                   float(-w1.y * o.x + w1.x * o.y) * detinv);
+  // float tot = bs.x + bs.y + 1.0;
+  return Vec3f(bs.x, bs.y, 1.0 - bs.x - bs.y);
+  // return Vec3f(bs.x / tot, 1. * bs.y / tot, 1.0 / tot);
+}
+
 void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
-    line(v1, v2, Color::white(), image);
-    line(v2, v3, Color::white(),  image);
-    line(v1, v3, Color::white(), image);
+    AABB2<int> box;
+    box = box.add_point(v1);
+    box = box.add_point(v2);
+    box = box.add_point(v3);
+
+    cout << "box " << box.topleft << " ->" << box.bottomright << "\n";
+    for(int x = box.topleft.x; x <= min<int>(image.w - 1, box.bottomright.x); ++x) {
+      for(int y = box.topleft.y; y <= min<int>(image.h - 1, box.bottomright.y); ++y) {
+        Vec2i cur(x, y);
+        Vec3f b = bary(cur, v1, v2, v3);
+        Vec2i bcur = v1 * b.x +  v2 * b.y + v3 * b.z;
+        cout << "\t" << cur << " ~ " << b << " | " << bcur << "\n";
+        if (b.x < 0 || b.y < 0 || b.z < 0) { continue; }
+        image(cur.x, cur.y) = Color::white();
+        // find barycentric coordinates, check if they are all positive
+
+      }
+    }
+    // line(v1, v2, Color::white(), image);
+    // line(v2, v3, Color::white(),  image);
+    // line(v1, v3, Color::white(), image);
 };
 
 void chapter2() {
 // Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
 const int width  = 200;
 const int height = 200;
-  Model model = parse_model("./obj/african_head/african_head.obj");
-  // Model model = parse_model("./obj/tri.obj");
+  //Model model = parse_model("./obj/african_head/african_head.obj");
+  Model model = parse_model("./obj/tri.obj");
   Image image(width, height, Color::darkgray());
   cout << "model has |" << model.verts.size() << "| vertices\n";
   cout << "model has |" << model.faces.size() << "| faces\n";
@@ -429,16 +525,6 @@ const int height = 200;
       screen_space_face[i] = Vec2i((v.x + 1.) * width/2., (v.y + 1)*height/2.);
     }
     triangle(screen_space_face[0], screen_space_face[1], screen_space_face[2], image);
-
-    // for(int j = 0; j < 3; ++j) {
-    //   const Vec3f v0 = model.verts[face[j]];
-    //   const Vec3f v1 = model.verts[face[(j+1)%3]];
-    //   int x0 = (v0.x+1.)*width/2.;
-    //   int y0 = (v0.y+1.)*height/2.;
-    //   int x1 = (v1.x+1.)*width/2.;
-    //   int y1 = (v1.y+1.)*height/2.;
-    //   line(Vec2i(x0, y0), Vec2i(x1, y1), Color::white(), image);
-    // }
     cout << "\n";
   }
 
