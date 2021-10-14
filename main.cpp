@@ -271,9 +271,15 @@ void write_image_to_ppm(Image &img, const char *fpath) {
   assert(f && "expected valid file path");
   fprintf(f, "%s\n", "P3");
   fprintf(f, "%d %d\n", img.w, img.h);
-  for(int y = 0; y < img.h; ++y) {
-    for(int x = 0; x < img.w; ++x) {
-      fprintf(f, "%d %d %d\n", img(x, y).r, img(x, y).b, img(x, y).g);
+  // (0, 0) is bottom left in OUTPUT / PPM FILE
+  // (0, 0) is top right in Image(x, y) / INPUT/ array img
+  // we must write in FILE coordinates.
+  for(int fy = 0; fy < img.h; ++fy) {
+    for(int fx = 0; fx < img.w; ++fx) {
+      const int iy = img.h - 1 - fy; // coordinate system change
+      const int ix = fx;
+      const Color c = img(ix, iy);
+      fprintf(f, "%d %d %d\n", c.r , c.g, c.b);
     }
   }
   fclose(f);
