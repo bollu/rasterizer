@@ -191,6 +191,7 @@ private:
 template<typename T>
 struct Vec2 { 
   T x, y;
+  Vec2() : x(0), y(0) {}
   Vec2(int x, int y) : x(x) , y(y) {}
   Vec2 abs() const {
     return Vec2(::abs(x), ::abs(y));
@@ -365,11 +366,11 @@ void line(Vec2i begin, Vec2i end, Color color, Image &img) {
   }
 }
 
+
+void chapter1() {
 // Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
 const int width  = 200;
 const int height = 200;
-
-void chapter1() {
   Model model = parse_model("./obj/african_head/african_head.obj");
   // Model model = parse_model("./obj/tri.obj");
   Image image(width, height, Color::darkgray());
@@ -399,7 +400,53 @@ void chapter1() {
 
 }
 
+
+void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
+    line(v1, v2, Color::white(), image);
+    line(v2, v3, Color::white(),  image);
+    line(v1, v3, Color::white(), image);
+};
+
+void chapter2() {
+// Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
+const int width  = 200;
+const int height = 200;
+  Model model = parse_model("./obj/african_head/african_head.obj");
+  // Model model = parse_model("./obj/tri.obj");
+  Image image(width, height, Color::darkgray());
+  cout << "model has |" << model.verts.size() << "| vertices\n";
+  cout << "model has |" << model.faces.size() << "| faces\n";
+  for(int f = 0; f < model.faces.size(); ++f) {
+    vector<int> face = model.faces[f];
+    cout << "have face: " << face << " {";
+    for(int j = 0; j < 3; ++j) {
+      cout << model.verts[face[j]] << " ";
+    }
+    cout << "}\n";
+    Vec2i screen_space_face[3];
+    for(int i = 0; i < 3; ++i) {
+      Vec3f v = model.verts[face[i]];
+      screen_space_face[i] = Vec2i((v.x + 1.) * width/2., (v.y + 1)*height/2.);
+    }
+    triangle(screen_space_face[0], screen_space_face[1], screen_space_face[2], image);
+
+    // for(int j = 0; j < 3; ++j) {
+    //   const Vec3f v0 = model.verts[face[j]];
+    //   const Vec3f v1 = model.verts[face[(j+1)%3]];
+    //   int x0 = (v0.x+1.)*width/2.;
+    //   int y0 = (v0.y+1.)*height/2.;
+    //   int x1 = (v1.x+1.)*width/2.;
+    //   int y1 = (v1.y+1.)*height/2.;
+    //   line(Vec2i(x0, y0), Vec2i(x1, y1), Color::white(), image);
+    // }
+    cout << "\n";
+  }
+
+  write_image_to_ppm(image, "out.ppm");
+}
+
 int main(){
-  chapter1();
+  // chapter1();
+  chapter2();
   return 0;
 }
