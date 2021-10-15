@@ -199,15 +199,27 @@ struct Vec2 {
   }
 
   Vec2<T> operator - (Vec2<T> other) {
-    return Vec2<T>(x + other.x, y + other.y);
-  }
-
-  Vec2<T> operator + (Vec2<T> other) {
     return Vec2<T>(x - other.x, y - other.y);
   }
 
-  Vec2<T> operator * (float f) {
-    return Vec2<T>(x * f, y * f);
+  Vec2<T> operator + (Vec2<T> other) {
+    return Vec2<T>(x + other.x, y + other.y);
+  }
+
+  Vec2<float> operator * (float f) {
+    return Vec2<float>(x * f, y * f);
+  }
+
+
+
+  T lensq() {
+    return x*x + y*y;
+  }
+
+  float len() { return std::sqrt(lensq()); }
+
+  T wedge(Vec2<T> other) {
+    return x * other.y - y * other.x;
   }
 
 };
@@ -432,51 +444,31 @@ struct AABB2 {
 };
 
 Vec3f bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
-  const Vec2i w1 = v1 - v3;
-  const Vec2i w2 = v2 - v3;
+  // v1 * a + v2 * b + v3 * c = out
+  // c = 1 - a - b
+  // v1 * a + v2 * b + v3 * (1 - a - b) = out
+  // (v1 - v3) * a + (v2 - v3) * b + v3 = out
+  // (v1 - v3) * a + (v2 - v3) * b = (out - v3)
+  // w1 * a + w2 * b = wout
+  Vec2i wout = out - v3;
+  Vec2i w1 = v1 - v3;
+  Vec2i w2 = v2 - v3;
+  // w2 /\ (w1 * a + w2 * b) = w2 /\ wout
+  // w2 /\ w1 * a = w2 /\ wout => a = (w2 /\ wout) / (w2 /\ w1)
+  // w1 /\ (w1 * a + w2 * b) = w1 /\ wout
+  // w1 /\ w2 * b = w1 /\ wout
+  // b = (w1 /\ wout) / (w1 /\ w2)
+  float b  = float(w1.wedge(wout)) / float(w1.wedge(w2));
+  float a  = float(w2.wedge(wout)) / float(w2.wedge(w1));
+  Vec2f residual;
+  residual = wout *1. - (w1 * a + w2 * b);
 
+  cout << "\t" << wout << " =?= " << w1 << "*" << a << " + " << w2 << "*" << b << " | " << residual << "\n";
+  assert(residual.len() < 1);
 
-
-  // [w1.x w2.x] [b1] = [out.x - v3.x]
-  // [w1.y w2.y] [b2] = [out.y - v3.y]
-    
-  // b1 (w1.x) + b2 (w2.x) = out.x - v3.x
-  // b1 (v1.x - v3.x) + b2(v2.x - v3.x) = (out.x - v3.x)
-  // b1 v1.x  + b2 v2.x (- b1 - b2 + 1) v3.x = out.x
-  
-
-  // o := [out.x - v3.x]
-  //      [out.y - v3.y]
-  const Vec2f o = Vec2f(out.x - v3.x, out.y - v3.y);
-
-  // A
-  // --
-  // [w1.x w2.x]
-  // [w1.y w2.y]
-  const float det = w1.x * w2.y - w1.y * w2.x;
-  const float detinv = 1.0 / (float)det;
-  
-  // adjoint = cofactor(A)^T
-
-  // cofactor:
-  // ---------
-  // [w2.y -w1.y]
-  // [-w2.x w1.x]
-
-  // adj := cofactor^T:
-  // ------------------
-  // [w2.y -w2.x]
-  // [-w1.y w1.x]
-
-  // [b1] = [w2.y -w2.x] [o.x] / det(A)
-  // [b2] = [-w1.y w1.x] [o.y] / det(A)
-  
-
-  const Vec2f bs = Vec2f(float(w2.y * o.x - w2.x * o.y) * detinv, 
-                   float(-w1.y * o.x + w1.x * o.y) * detinv);
-  // float tot = bs.x + bs.y + 1.0;
-  return Vec3f(bs.x, bs.y, 1.0 - bs.x - bs.y);
-  // return Vec3f(bs.x / tot, 1. * bs.y / tot, 1.0 / tot);
+  float c = 1 - a - b;
+  assert((out * 1. - v1 * a - v2 * b - v3 * c).len() < 1);
+  return Vec3f(a, b, c);
 }
 
 void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
@@ -490,7 +482,7 @@ void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
       for(int y = box.topleft.y; y <= min<int>(image.h - 1, box.bottomright.y); ++y) {
         Vec2i cur(x, y);
         Vec3f b = bary(cur, v1, v2, v3);
-        Vec2i bcur = v1 * b.x +  v2 * b.y + v3 * b.z;
+        Vec2f bcur = v1 * b.x +  v2 * b.y + v3 * b.z;
         cout << "\t" << cur << " ~ " << b << " | " << bcur << "\n";
         if (b.x < 0 || b.y < 0 || b.z < 0) { continue; }
         image(cur.x, cur.y) = Color::white();
@@ -501,6 +493,33 @@ void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
     // line(v1, v2, Color::white(), image);
     // line(v2, v3, Color::white(),  image);
     // line(v1, v3, Color::white(), image);
+};
+
+
+
+
+int rand_int() {
+  return (rand() % 10) * (rand() % 2 ? 1 : -1);
+}
+
+float rand_01() {
+  const int N = 1000;
+  return float(rand() % N) / float(N - 1);
+}
+
+Vec2i rand_vec2i() {
+  return Vec2i(rand_int(), rand_int());
+};
+
+void test_bary() {
+  Vec2i v1 = rand_vec2i();
+  Vec2i v2 = rand_vec2i();
+  Vec2i v3 = rand_vec2i();
+  Vec2i w = rand_vec2i();
+  Vec3f out_bary = bary(w, v1, v2, v3);
+  Vec2f out_w = v1 * out_bary.x + v2 * out_bary.y + v3 * out_bary.z;
+  (void)(out_w);
+  // float delta = (out_w - w).lensq();
 };
 
 void chapter2() {
