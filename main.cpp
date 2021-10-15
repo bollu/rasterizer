@@ -460,6 +460,7 @@ Vec3f bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
   // b = (w1 /\ wout) / (w1 /\ w2)
   float b  = float(w1.wedge(wout)) / float(w1.wedge(w2));
   float a  = float(w2.wedge(wout)) / float(w2.wedge(w1));
+
   Vec2f residual;
   residual = wout *1. - (w1 * a + w2 * b);
 
@@ -467,7 +468,8 @@ Vec3f bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
   assert(residual.len() < 1);
 
   float c = 1 - a - b;
-  assert((out * 1. - v1 * a - v2 * b - v3 * c).len() < 1);
+  residual = (out * 1. - v1 * a - v2 * b - v3 * c);
+  assert(residual.len() < 1);
   return Vec3f(a, b, c);
 }
 
@@ -512,15 +514,18 @@ Vec2i rand_vec2i() {
 };
 
 void test_bary() {
-  Vec2i v1 = rand_vec2i();
-  Vec2i v2 = rand_vec2i();
-  Vec2i v3 = rand_vec2i();
-  Vec2i w = rand_vec2i();
-  Vec3f out_bary = bary(w, v1, v2, v3);
-  Vec2f out_w = v1 * out_bary.x + v2 * out_bary.y + v3 * out_bary.z;
-  (void)(out_w);
-  // float delta = (out_w - w).lensq();
-};
+  const int NTESTS = 1000;
+  for(int i = 0; i < NTESTS; ++i) {
+    Vec2i v1 = rand_vec2i();
+    Vec2i v2 = rand_vec2i();
+    Vec2i v3 = rand_vec2i();
+    Vec2i w = rand_vec2i();
+    Vec3f out_bary = bary(w, v1, v2, v3);
+    Vec2f out_w = v1 * out_bary.x + v2 * out_bary.y + v3 * out_bary.z;
+    Vec2f residual = (out_w - w*1.);
+    assert(residual.lensq() < 1e-1);
+  };
+}
 
 void chapter2() {
 // Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
@@ -552,6 +557,7 @@ const int height = 200;
 
 int main(){
   // chapter1();
+  // test_bary();
   chapter2();
   return 0;
 }
