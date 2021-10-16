@@ -188,6 +188,62 @@ private:
 };
 
 
+template<typename T>
+struct Vec3T { 
+  T x, y, z;
+  Vec3T() : x(0), y(0), z(0) {}
+  Vec3T(T x, T y, T z): x(x), y(y), z(z) {}
+
+
+  T lensq() {
+    return x*x + y*y + z*z;
+  }
+
+  float len() { return sqrt(float(lensq())); }
+  Vec3T<float> normalize() {
+    float l = len();
+    return Vec3T<float>(x/l, y/l, z/l);
+  }
+
+  T dot(const Vec3T<T> &other) {
+    return x*other.x + y*other.y + z*other.z;
+  }
+
+
+  Vec3T<float> operator * (float f) {
+    return Vec3T<float>(x * f, y * f, z*f);
+  }
+
+
+
+};
+
+template<typename T>
+ostream &operator << (ostream &o, Vec3T<T> v) {
+  return o << "v3(" << v.x << "  " << v.y << " " << v.z << ")";
+}
+
+template<typename T>
+Vec3T<T> operator - (Vec3T<T> v, Vec3T<T> w) {
+  return Vec3T<T>(v.x - w.x, v.y - w.y, v.z - w.z);
+}
+
+template<typename T>
+Vec3T<T> operator ^ (Vec3T<T> v, Vec3T<T> w) {
+  Vec3T<T> out;
+  // i x j = k
+  out.z = v.x * w.y - v.y * w.x;
+  // j x k = i
+  out.x = v.y * w.z - v.z * w.y;
+  // k x i = j
+  out.y = v.z * w.x - v.x * w.z;
+  return out;
+}
+
+using Vec3i = Vec3T<int>;
+using Vec3f = Vec3T<float>;
+
+
 
 
 template<typename T>
@@ -211,8 +267,6 @@ struct Vec2 {
     return Vec2<float>(x * f, y * f);
   }
 
-
-
   T lensq() {
     return x*x + y*y;
   }
@@ -232,20 +286,6 @@ ostream &operator << (ostream &o, Vec2<T> v) {
   return o << "v2(" << v.x << "  " << v.y << ")";
 }
 
-
-template<typename T>
-struct Vec3T { 
-  T x, y, z;
-  Vec3T(T x, T y, T z): x(x), y(y), z(z) {}
-};
-
-template<typename T>
-ostream &operator << (ostream &o, Vec3T<T> v) {
-  return o << "v3(" << v.x << "  " << v.y << " " << v.z << ")";
-}
-
-using Vec3i = Vec3T<int>;
-using Vec3f = Vec3T<float>;
 
 struct Color {
   int r, g, b;
@@ -500,7 +540,7 @@ std::optional<Vec3f> bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
   return { Vec3f(a, b, c) };
 }
 
-void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
+void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image, Color color) {
     AABB2<int> box;
     box = box.add_point(v1);
     box = box.add_point(v2);
@@ -515,7 +555,7 @@ void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
         // Vec2f bcur = v1 * b->x +  v2 * b->y + v3 * b->z;
         // cout << "\t" << cur << " ~ " << *b << " | " << bcur << "\n";
         if (b->x < 0 || b->y < 0 || b->z < 0) { continue; }
-        image(cur.x, cur.y) = Color::white();
+        image(cur.x, cur.y) = color;
         // find barycentric coordinates, check if they are all positive
 
       }
@@ -567,6 +607,7 @@ const int height = 200;
   Image image(width, height, Color::black());
   cout << "model has |" << model.verts.size() << "| vertices\n";
   cout << "model has |" << model.faces.size() << "| faces\n";
+  const Vec3f light_dir = Vec3f(0, 0, -1).normalize();
   for(int f = 0; f < model.faces.size(); ++f) {
     vector<int> face = model.faces[f];
     cout << "have face: " << face << " {";
@@ -574,12 +615,18 @@ const int height = 200;
       cout << model.verts[face[j]] << " ";
     }
     cout << "}\n";
-    Vec2i screen_space_face[3];
+    Vec3f world_space_vs[3];
+    Vec2i screen_space_vs[3];
     for(int i = 0; i < 3; ++i) {
-      Vec3f v = model.verts[face[i]];
-      screen_space_face[i] = Vec2i((v.x + 1.) * width/2., (v.y + 1)*height/2.);
+      Vec3f v = world_space_vs[i] = model.verts[face[i]];
+      screen_space_vs[i] = Vec2i((v.x + 1.) * width/2., (v.y + 1)*height/2.);
     }
-    triangle(screen_space_face[0], screen_space_face[1], screen_space_face[2], image);
+
+    Vec3f nhat = (world_space_vs[2] - world_space_vs[0]) ^ (world_space_vs[1] - world_space_vs[0]);
+    float intensity = 255 * nhat.normalize().dot(light_dir);
+    if (intensity < 0) { continue; }
+    Color color = Color(intensity, intensity, intensity);
+    triangle(screen_space_vs[0], screen_space_vs[1], screen_space_vs[2], image, color);
     cout << "\n";
   }
 
