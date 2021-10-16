@@ -7,6 +7,7 @@
 #include <string.h>
 
 
+const float EPS = 1e-3;
 using namespace std;
 using ll = long long;
 
@@ -260,12 +261,20 @@ struct Color {
     return Color(255, 255, 255);
   }
 
+  static Color red() {
+    return Color(255, 0, 0);
+  }
+
   static Color lightgray() {
     return Color(230, 230, 230);
   }
 
   static Color darkgray() {
     return Color(42, 42, 42);
+  }
+
+  static Color black() {
+    return Color(0, 0, 0);
   }
 };
 
@@ -295,6 +304,7 @@ void write_image_to_ppm(Image &img, const char *fpath) {
   assert(f && "expected valid file path");
   fprintf(f, "%s\n", "P3");
   fprintf(f, "%d %d\n", img.w, img.h);
+  fprintf(f, "%s\n", "255");
   // (0, 0) is bottom left in OUTPUT / PPM FILE
   // (0, 0) is top right in Image(x, y) / INPUT/ array img
   // we must write in FILE coordinates.
@@ -396,7 +406,7 @@ const int width  = 200;
 const int height = 200;
   Model model = parse_model("./obj/african_head/african_head.obj");
   // Model model = parse_model("./obj/tri.obj");
-  Image image(width, height, Color::darkgray());
+  Image image(width, height, Color::black());
   cout << "model has |" << model.verts.size() << "| vertices\n";
   cout << "model has |" << model.faces.size() << "| faces\n";
   for(int f = 0; f < model.faces.size(); ++f) {
@@ -429,21 +439,28 @@ template<typename T>
 struct AABB2 {
   Vec2<T> topleft;
   Vec2<T> bottomright;
+  bool initialized = false;
 
   AABB2() {}
 
   AABB2<T> add_point(Vec2<T> p) {
     AABB2<T> out = *this;
-    out.topleft.x = min<T>(out.topleft.x, p.x);
-    out.bottomright.x = max<T>(out.bottomright.x, p.x);
+    if (!initialized) {
+      out.initialized = true;
+      out.topleft = out.bottomright = p;
+      return out;
+    } else {
+      out.topleft.x = min<T>(out.topleft.x, p.x);
+      out.bottomright.x = max<T>(out.bottomright.x, p.x);
 
-    out.topleft.y = min<T>(out.topleft.y, p.y);
-    out.bottomright.y = max<T>(out.bottomright.y, p.y);
-    return out;
+      out.topleft.y = min<T>(out.topleft.y, p.y);
+      out.bottomright.y = max<T>(out.bottomright.y, p.y);
+      return out;
+    }
   }
 };
 
-Vec3f bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
+std::optional<Vec3f> bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
   // v1 * a + v2 * b + v3 * c = out
   // c = 1 - a - b
   // v1 * a + v2 * b + v3 * (1 - a - b) = out
@@ -458,8 +475,18 @@ Vec3f bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
   // w1 /\ (w1 * a + w2 * b) = w1 /\ wout
   // w1 /\ w2 * b = w1 /\ wout
   // b = (w1 /\ wout) / (w1 /\ w2)
-  float b  = float(w1.wedge(wout)) / float(w1.wedge(w2));
-  float a  = float(w2.wedge(wout)) / float(w2.wedge(w1));
+
+  float w1_wedge_w2 = float(w1.wedge(w2));
+  if (fabs(w1_wedge_w2) < EPS) {
+    // v1 - v3 = v2 - v3
+    // so v1 ~ v2
+    // can't represent points in 2D as convex combination of  1D object (a line)
+    return {};
+
+  }
+  const float w2_wedge_w1 = w2.wedge(w1);
+  float b  = float(w1.wedge(wout)) / w1_wedge_w2;
+  float a  = float(w2.wedge(wout)) / w2_wedge_w1;
 
   Vec2f residual;
   residual = wout *1. - (w1 * a + w2 * b);
@@ -470,7 +497,7 @@ Vec3f bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
   float c = 1 - a - b;
   residual = (out * 1. - v1 * a - v2 * b - v3 * c);
   assert(residual.len() < 1);
-  return Vec3f(a, b, c);
+  return { Vec3f(a, b, c) };
 }
 
 void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
@@ -483,10 +510,11 @@ void triangle(Vec2i v1, Vec2i v2, Vec2i v3, Image &image) {
     for(int x = box.topleft.x; x <= min<int>(image.w - 1, box.bottomright.x); ++x) {
       for(int y = box.topleft.y; y <= min<int>(image.h - 1, box.bottomright.y); ++y) {
         Vec2i cur(x, y);
-        Vec3f b = bary(cur, v1, v2, v3);
-        Vec2f bcur = v1 * b.x +  v2 * b.y + v3 * b.z;
-        cout << "\t" << cur << " ~ " << b << " | " << bcur << "\n";
-        if (b.x < 0 || b.y < 0 || b.z < 0) { continue; }
+        optional<Vec3f> b = bary(cur, v1, v2, v3);
+        if (!b) { continue; }
+        // Vec2f bcur = v1 * b->x +  v2 * b->y + v3 * b->z;
+        // cout << "\t" << cur << " ~ " << *b << " | " << bcur << "\n";
+        if (b->x < 0 || b->y < 0 || b->z < 0) { continue; }
         image(cur.x, cur.y) = Color::white();
         // find barycentric coordinates, check if they are all positive
 
@@ -520,8 +548,11 @@ void test_bary() {
     Vec2i v2 = rand_vec2i();
     Vec2i v3 = rand_vec2i();
     Vec2i w = rand_vec2i();
-    Vec3f out_bary = bary(w, v1, v2, v3);
-    Vec2f out_w = v1 * out_bary.x + v2 * out_bary.y + v3 * out_bary.z;
+    std::optional<Vec3f> out_bary = bary(w, v1, v2, v3);
+    if (!out_bary) {
+      continue;
+    }
+    Vec2f out_w = v1 * out_bary->x + v2 * out_bary->y + v3 * out_bary->z;
     Vec2f residual = (out_w - w*1.);
     assert(residual.lensq() < 1e-1);
   };
@@ -531,9 +562,9 @@ void chapter2() {
 // Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
 const int width  = 200;
 const int height = 200;
-  //Model model = parse_model("./obj/african_head/african_head.obj");
-  Model model = parse_model("./obj/tri.obj");
-  Image image(width, height, Color::darkgray());
+  Model model = parse_model("./obj/african_head/african_head.obj");
+  // Model model = parse_model("./obj/tri.obj");
+  Image image(width, height, Color::black());
   cout << "model has |" << model.verts.size() << "| vertices\n";
   cout << "model has |" << model.faces.size() << "| faces\n";
   for(int f = 0; f < model.faces.size(); ++f) {
@@ -555,9 +586,14 @@ const int height = 200;
   write_image_to_ppm(image, "out.ppm");
 }
 
+
+void chapter2b() {
+}
+
 int main(){
   // chapter1();
   // test_bary();
   chapter2();
+  // chapter3();
   return 0;
 }
