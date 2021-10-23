@@ -214,6 +214,26 @@ struct Vec3T {
     return Vec3T<float>(x * f, y * f, z*f);
   }
 
+  Vec3T<T> cross(Vec3T<T> other) {
+    Vec3T<T> out;
+    // i x j = k
+    out.z = this->x * other.y;
+    // j x k = i
+    out.x = this->y * other.z;
+    // k x i = j
+    out.y = this->z * other.x;
+    return out;
+  }
+
+  T& operator ()(int i) {
+    assert (i >= 0);
+    assert(i < 3);
+    if (i == 0) { return x; }
+    else if (i == 1) { return y;}
+    else if (i == 2) { return z; }
+    assert(false && "unreachable");
+  }
+
 
 
 };
@@ -707,12 +727,120 @@ const int INFTY = 1e9;
   write_image_to_ppm(image, "out.ppm");
 }
 
+// TODO: make this a template over nrows, ncols.
+struct Matrix {
+  int nrows, ncols;
+  vector<float> raw;
+
+  // row x col
+  Matrix(int nrows, int ncols) : nrows(nrows), ncols(ncols), raw(nrows * ncols, 0) {}
+  static Matrix identity(int n) {
+    Matrix m(n, n);
+    for(int i = 0;i < n; ++i) { m(i, i) = 1; }
+    return m; 
+  }
+
+  float &operator () (int i, int j) {
+    assert (i < nrows);
+    assert (j < ncols);
+    return raw[i * ncols + j];
+  }
+  Matrix operator * (Matrix other) {
+    assert(this->ncols == other.nrows);
+    Matrix out(this->nrows, other.ncols);
+    for(int i = 0; i < this->nrows; ++i) {
+      for(int j = 0; j < other.ncols; ++j) {
+        for(int k = 0; k < this->ncols; ++k) {
+          out(i, j) += (*this)(i, k) * other(k, j);
+        }
+      }
+    }
+    return out;
+  }
+
+};
+
+// Ax
+Vec3f operator * (Matrix m, Vec3f v) {
+  Vec3f out;
+  for(int o = 0; o < 3; ++o) {
+    for(int i = 0; i < 3; ++i) {
+      out(o) += m(o, i) * v(i);
+    }
+  }
+  return out;
+}
+
+
+// camera is at `eye`.
+// Camera looks at `center`.
+// Angled such that `yfinal` looks "upwards" in the final scene.
+// TODO: understand this!
+Matrix lookat(Vec3f eye, Vec3f center, Vec3f yfinal) {
+    // z is vector from center to eye.
+    Vec3f z = (eye-center).normalize();
+    Vec3f x = yfinal.cross(z).normalize();
+    Vec3f y = z.cross(x).normalize();
+    Matrix Minv = Matrix::identity(3); // align axis
+    Matrix Tr   = Matrix::identity(3); // translate to center
+    for (int i=0; i<3; i++) {
+        Minv(0, i) = x(i);
+        Minv(1, i) = y(i);
+        Minv(2, i) = z(i);
+        Tr(i, 3) = -center(i);
+    }
+    // TODO: implement matmul
+    return Minv*Tr;
+}
+
+
+// map [-1, 1] x [-1, 1] x [-1, 1] to [x, x+w] x [y, y + h] x [0, depth]
+// δ -> [x + w/2] + δ[w/2] where (-1 <= δ <= 1)
+Matrix viewport(int x, int y, int w, int h) {
+  const int depth = 255; 
+  Matrix m = Matrix::identity(4);
+  m(0, 3) = x+w/2.f; // translation
+  m(1, 3) = y+h/2.f;
+  m(2, 3) = depth/2.f;
+
+  m(0, 0) = w/2.f; // scaling
+  m(1, 1) = h/2.f;
+  m(2, 2) = depth/2.f;
+  return m;
+}
+
+
+// Transformation of normal vectors
+// Let f: X -> Y is an affine maps, which maps line `l` to `T(l)`. 
+// A normal `n` to the line `T(l)` gets mapped by (Matrix(f)^{-1})^T.
+// What the fuck is _transpose_ doing? I think that's dual space.
+// What the fuck is _inverse_ doing? I think that's contravariance.
+// Consider:
+
+// Take a pencil and draw a 2D triangle (0,0), (0,1), (1,0) and a vector n, normal to the hypothenuse
+// Naturally, n is equal to (1,1). 
+// Then let us stretch all the y-coordinates by a factor of 2, leaving x-coordinates intact. 
+// Thus, our triangle becomes (0,0), (0,2), (1,0). 
+// If we transform the vector n in the same way, it becomes (1, 2). It is no longer orthogonal to the transformed edge of the triangle.
+//
+//
+// plane-perp-to-n := { r  | [n, 0] . [r, 1] = 0 } [use homogeneous coord]
+// plane-perp-to-n := { r  | [n, 0]^T [r, 1] = 0 } [use homogeneous coord]
+// plane-perp-to-n := { r  | [n, 0]^T M^{-1} M [r, 1] = 0 } [use homogeneous coord]
+// plane-perp-to-n := { r  | (M^{-1}^T [n, 0])^T  (M [r, 1]) = 0 } [use homogeneous coord]
+
+
+
+// drawing a real model with + z buffering with trianglez() + perspective projection
+void chapter4() {
+}
 
 
 int main(){
   // chapter1();
   // test_bary();
   // chapter2();
-  chapter3();
+  // chapter3();
+  chapter4(); 
   return 0;
 }
