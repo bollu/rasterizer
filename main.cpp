@@ -264,6 +264,61 @@ Vec3T<T> operator ^ (Vec3T<T> v, Vec3T<T> w) {
 using Vec3i = Vec3T<int>;
 using Vec3f = Vec3T<float>;
 
+template<typename T>
+struct Vec4T { 
+  T x, y, z, w;
+  Vec4T() : x(0), y(0), z(0), w(0) {}
+  Vec4T(T x, T y, T z, T w): x(x), y(y), z(z), w(w) {}
+
+
+  T lensq() {
+    return x*x + y*y + z*z + w*w;
+  }
+
+
+  T& operator ()(int i) {
+    assert (i >= 0);
+    assert(i < 4);
+    if (i == 0) { return x; }
+    else if (i == 1) { return y;}
+    else if (i == 2) { return z; }
+    else if (i == 3) { return w; }
+    assert(false && "unreachable");
+  }
+
+  const T& operator ()(int i) const {
+    assert (i >= 0);
+    assert(i < 4);
+    if (i == 0) { return x; }
+    else if (i == 1) { return y;}
+    else if (i == 2) { return z; }
+    else if (i == 3) { return w; }
+    assert(false && "unreachable");
+  }
+
+
+
+};
+
+template<typename T>
+ostream &operator << (ostream &o, Vec4T<T> v) {
+  return o << "v4[" << v.x << ":" << v.y << ":" << v.z << ":" << v.w << "]";
+}
+
+template<typename T>
+Vec3T<float> unprojectivize(Vec4T<T> v) {
+  return Vec3T<float>(v.x/(float)v.w, v.y/(float)v.w, v.z/(float)v.w);
+}
+
+template<typename T>
+Vec4T<T> projectivize(Vec3T<T> v) {
+  return Vec4T<float>(v.x, v.y, v.z, 1);
+}
+
+using Vec4i = Vec4T<int>;
+using Vec4f = Vec4T<float>;
+
+
 
 
 
@@ -771,6 +826,20 @@ struct Matrix {
     return out;
   }
 
+  template<typename T>
+  Vec4T<float> operator * (const Vec4T<T> other) {
+    assert(this->nrows == 4);
+    assert(this->ncols == 4);
+    Vec4T<float> out;
+    for(int i = 0; i < this->nrows; ++i) {
+        for(int k = 0; k < this->ncols; ++k) {
+          out(i) += (*this)(i, k) * other(k);
+        }
+      }
+    return out;
+  }
+
+
   // https://cp-algorithms.com/linear_algebra/linear-system-gauss.html
   // returns determinant and matrix.
   bool inverse(Matrix &out) const {
@@ -858,6 +927,7 @@ std::ostream &operator << (std::ostream &o, const Matrix &m) {
 // Camera looks at `center`.
 // Angled such that `yfinal` looks "upwards" in the final scene.
 // TODO: understand this!
+// Returns 4x4 matrix!
 Matrix lookat(Vec3f eye, Vec3f center, Vec3f yfinal) {
     // z is vector from center to eye.
     Vec3f z = (eye-center).normalize();
@@ -914,8 +984,6 @@ Matrix viewport(int x, int y, int w, int h) {
 
 
 // drawing a real model with + z buffering with trianglez() + perspective projection
-void chapter4() {
-}
 
 
 void test_matinv() {
@@ -950,13 +1018,63 @@ void test_matinv() {
         float v = id_approx(r, c);
         float expected = r == c;
         if (abs(v - expected) > EPS) {
-          cerr << "\t ERROR: too large: |id_appox(" << r << ", " << c << "):" << v << " - " << expected << "| = " << abs(v - expected) << ". \n";
+          cerr << "\t ERROR: too large: |id_appox(" << r << ", " << c << "):"
+            << v << " - " << expected << "| = " << abs(v - expected) << ". \n";
           assert(false && "incorrect inverse computation");
         }
       }
     }
   }
 };
+
+void chapter4() {
+// Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
+const int width  = 800;
+const int height = 800;
+const int INFTY = 1e9;
+  Model model = parse_model("./obj/african_head/african_head.obj");
+  // default look at matrix.
+  Matrix lookM = lookat(Vec3f(0, 0, 0), Vec3f(0, 0, 1), Vec3f(0, 1, 0));
+
+  // Model model = parse_model("./obj/tri.obj");
+  Image image(width, height, Color::black());
+  cout << "model has |" << model.verts.size() << "| vertices\n";
+  cout << "model has |" << model.faces.size() << "| faces\n";
+  const Vec3f light_dir = Vec3f(0, 0, -1).normalize();
+  float *zbuffer = new float[width * height];
+
+  for(int i = 0; i < width * height; ++i) { zbuffer[i] = -INFTY; }
+  for(int f = 0; f < model.faces.size(); ++f) {
+    vector<int> face = model.faces[f];
+    cout << "have face: " << face << " {";
+    for(int j = 0; j < 3; ++j) {
+      cout << model.verts[face[j]] << " ";
+    }
+    cout << "}\n";
+    Vec3f world_space_vs[3];
+    Vec3f view_space_vs[3];
+    Vec2i screen_space_vs[3];
+    for(int i = 0; i < 3; ++i) {
+      world_space_vs[i] = model.verts[face[i]];
+      view_space_vs[i] = unprojectivize(lookM *projectivize( world_space_vs[i]));
+      screen_space_vs[i] = Vec2i((view_space_vs[i].x + 1.) * width/2., (view_space_vs[i].y + 1)*height/2.);
+    }
+
+    // normal for tri.
+    Vec3f nhat = (world_space_vs[2] - world_space_vs[0]) ^ (world_space_vs[1] - world_space_vs[0]);
+
+    float intensity = 255 * nhat.normalize().dot(light_dir);
+    if (intensity < 0) { continue; }
+    Color color = Color(intensity, intensity, intensity);
+    trianglez(world_space_vs, screen_space_vs, zbuffer, image, color);
+    cout << "\n";
+  }
+
+  write_image_to_ppm(image, "out.ppm");
+
+}
+
+
 int main(){
   // chapter1();
   // test_bary();
