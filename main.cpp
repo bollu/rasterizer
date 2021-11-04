@@ -4,8 +4,9 @@
 #include <assert.h>
 #include <vector>
 #include <optional>
+#include <functional>
+#include <utility>
 #include <string.h>
-
 
 const float EPS = 1e-3;
 using namespace std;
@@ -300,6 +301,7 @@ struct Vec2 {
 };
 using Vec2i = Vec2<int>;
 using Vec2f = Vec2<float>;
+
 
 template<typename T>
 ostream &operator << (ostream &o, Vec2<T> v) {
@@ -727,6 +729,10 @@ const int INFTY = 1e9;
   write_image_to_ppm(image, "out.ppm");
 }
 
+
+struct Matrix;
+std::ostream &operator << (std::ostream &o, const Matrix &m);
+
 // TODO: make this a template over nrows, ncols.
 struct Matrix {
   int nrows, ncols;
@@ -745,6 +751,13 @@ struct Matrix {
     assert (j < ncols);
     return raw[i * ncols + j];
   }
+
+  const float &operator () (int i, int j) const {
+    assert (i < nrows);
+    assert (j < ncols);
+    return raw[i * ncols + j];
+  }
+
   Matrix operator * (Matrix other) {
     assert(this->ncols == other.nrows);
     Matrix out(this->nrows, other.ncols);
@@ -758,17 +771,86 @@ struct Matrix {
     return out;
   }
 
+  // https://cp-algorithms.com/linear_algebra/linear-system-gauss.html
+  // returns determinant and matrix.
+  bool inverse(Matrix &out) const {
+    assert (this->nrows == this->ncols);
+    assert(out.nrows == this->nrows);
+    assert(out.ncols == this->ncols);
+    Matrix M = Matrix(this->nrows, this->ncols*2);
+    for(int r = 0; r < nrows; ++r) {
+      for(int c = 0; c < ncols; ++c) {
+        M(r, c) = (*this)(r, c);
+      }
+    }
+    // identity matrix, by filling in diagonal of M[:, nrows+:]
+    for(int r = 0; r < nrows; ++r) {
+      M(r, ncols + r) = 1;
+    }
+
+    // kill vars, column by column
+    for(int c = 0, r = 0; r < nrows && c < ncols; ++c) {
+      // select row [>= r] with largest absolute value for this column.
+      int sel = r;
+      for(int s = r; s < nrows; ++s) {
+        if (abs(M(s, c)) > abs(M(sel, c))) {
+          sel = s;
+        }
+        // no row has nonzero entry for this column.
+        if (abs (M(sel, c)) < EPS) { return false; }
+      }
+      // Move [sel]'th row to current row [r]
+      for (int d = 0; d < 2*ncols; ++d) { swap (M(sel, d), M(r, d)); }
+
+
+      // kill the value of this column [c] at all other rows [s] using row [r]
+      for (int s = 0; s < nrows; ++s) {
+        if (s == r) { continue; }
+        // scale coefficient for row `s`
+        const double coeff = M(s, c) / (double) M(r, c);
+        // kill everything in row `s`. Can start with `0` instead of `c`.
+        for (int d = 0; d < 2*ncols; ++d) {
+          M(s, d) -= M(r, d) *coeff;
+        }
+      }
+      cout << M << "\n";
+
+      // rescale row [r] by M[r, c]
+      const double rescale = M(r, c);
+      for (int d = 0; d < 2*ncols; ++d) { 
+        M(r, d) /=  rescale;
+      }
+
+      cout << M << "\n";
+
+      ++r; // go to next row for placement.
+    }
+
+    for(int r = 0; r < nrows; ++r) {
+      for(int c = 0; c < ncols; ++c) {
+        out(r, c) = M(r, this->ncols+c);
+      }
+    }
+    return true;
+  }
+
 };
 
-// Ax
-Vec3f operator * (Matrix m, Vec3f v) {
-  Vec3f out;
-  for(int o = 0; o < 3; ++o) {
-    for(int i = 0; i < 3; ++i) {
-      out(o) += m(o, i) * v(i);
+std::ostream &operator << (std::ostream &o, const Matrix &m) {
+  const int WIDTH = 3;
+  const int oldwidth = o.width(WIDTH);
+  for(int r = 0; r < m.nrows; ++r) {
+    if (r == 0) { cout << "[["; } else { cout << "\n ["; }
+    for(int c = 0; c < m.ncols; ++c) {
+      if (c > 0) { o << " "; } 
+      o.width(WIDTH);
+      o << m(r, c); 
     }
+    o << "]";
   }
-  return out;
+  o << "]";
+  o.width(oldwidth);
+  return o;
 }
 
 
@@ -781,15 +863,15 @@ Matrix lookat(Vec3f eye, Vec3f center, Vec3f yfinal) {
     Vec3f z = (eye-center).normalize();
     Vec3f x = yfinal.cross(z).normalize();
     Vec3f y = z.cross(x).normalize();
-    Matrix Minv = Matrix::identity(3); // align axis
-    Matrix Tr   = Matrix::identity(3); // translate to center
+    Matrix Minv = Matrix::identity(4); // align axis
+    Matrix Tr   = Matrix::identity(4); // translate to center
     for (int i=0; i<3; i++) {
         Minv(0, i) = x(i);
         Minv(1, i) = y(i);
         Minv(2, i) = z(i);
         Tr(i, 3) = -center(i);
     }
-    // TODO: implement matmul
+    // TODO: implement matmul, inverse.
     return Minv*Tr;
 }
 
@@ -836,9 +918,49 @@ void chapter4() {
 }
 
 
+void test_matinv() {
+  const int NTESTS = 100;
+  for(int i = 0; i < NTESTS; ++i) {
+    int N = 4;
+    Matrix m(N, N);
+    for(int r = 0; r < N; ++r) {
+      for(int c = 0; c < N; ++c) {
+        m(r, c) = (rand() % 10) * (rand() % 2 ? 1 : -1);
+      }
+    }
+
+    cerr << "---\n";
+    cerr << m << "\n";
+    Matrix inv(N, N);
+    bool is_invertible = m.inverse(inv);
+    if (!is_invertible) { 
+      cerr << "\t- not invertible!\n";
+      continue;
+    }
+    cerr << "\tinverse:\n";
+    cerr << inv << "\n";
+
+    Matrix id_approx = inv * m;
+
+    cerr << "\tid approx:\n";
+    cerr << id_approx << "\n";
+
+    for(int r = 0; r < N; ++r) {
+      for(int c = 0; c < N; ++c) {
+        float v = id_approx(r, c);
+        float expected = r == c;
+        if (abs(v - expected) > EPS) {
+          cerr << "\t ERROR: too large: |id_appox(" << r << ", " << c << "):" << v << " - " << expected << "| = " << abs(v - expected) << ". \n";
+          assert(false && "incorrect inverse computation");
+        }
+      }
+    }
+  }
+};
 int main(){
   // chapter1();
   // test_bary();
+  test_matinv();
   // chapter2();
   // chapter3();
   chapter4(); 

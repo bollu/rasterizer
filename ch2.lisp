@@ -31,7 +31,7 @@
 
 
 ;;  check that this is indeed correct
-(defun v3cross (p q)
+(defun vx (p q)
   (defun component (f g c d)
     (-  (*  (funcall f c) (funcall g d))
 	(* (funcall g c) (funcall f d))))
@@ -39,17 +39,17 @@
       (component #'v3->z #'v3->x p q)
       (component #'v3->x #'v3->y p q)))
 
-(v3cross (v3 1 0 0) (v3 1 0 0))
-(v3cross (v3 1 0 0) (v3 0 1 0))
-(v3cross (v3 1 0 0) (v3 0 0 1))
+(vx (v3 1 0 0) (v3 1 0 0))
+(vx (v3 1 0 0) (v3 0 1 0))
+(vx (v3 1 0 0) (v3 0 0 1))
 
-(v3cross (v3 0 1 0) (v3 1 0 0))
-(v3cross (v3 0 1 0) (v3 0 1 0))
-(v3cross (v3 0 1 0) (v3 0 0 1))
+(vx (v3 0 1 0) (v3 1 0 0))
+(vx (v3 0 1 0) (v3 0 1 0))
+(vx (v3 0 1 0) (v3 0 0 1))
 
-(v3cross (v3 0 0 1) (v3 1 0 0))
-(v3cross (v3 0 0 1) (v3 0 1 0))
-(v3cross (v3 0 0 1) (v3 0 0 1))
+(vx (v3 0 0 1) (v3 1 0 0))
+(vx (v3 0 0 1) (v3 0 1 0))
+(vx (v3 0 0 1) (v3 0 0 1))
 
 (defun v2 (x y) (list x y))
 
@@ -60,7 +60,7 @@
   (elt v 1))
 
 
-(defun v2+ (a b)
+(defun v+ (a b)
   (v2 (+ (elt a 0) (elt b 0))
       (+ (elt a 1) (elt b 1))))
 
@@ -99,7 +99,7 @@
 	 (ab (v2- b a))
 	 (ac (v2- c a))
 	 (orth (list ac ab pa))
-	 (crossv  (funcall #'v3cross
+	 (crossv  (funcall #'vx
 			   (mapcar #'v2->x orth)
 			   (mapcar #'v2->y orth)))
 	 (u (v3->x crossv))
@@ -202,14 +202,14 @@
 
 
 (defun polar-project (c r theta)
-  (v2floor (v2+ c (v2 (* r (cos theta))
+  (v2floor (v+ c (v2 (* r (cos theta))
 		      (* r (sin theta))))))
 
 (defun ch2-main ()
   (let ((img (make-array (list +w+ +h+) :initial-element 0.5)))
     (color-pixels img (plot-tri (v3 +c+
-				    (v2+ +c+ (v2 +r+ 0))
-				    (v2+ +c+ (v2 0 +r+)))))
+				    (v+ +c+ (v2 +r+ 0))
+				    (v+ +c+ (v2 0 +r+)))))
     (write-img-to-file img "out-ch2.ppm")))
 
 
