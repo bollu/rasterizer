@@ -218,11 +218,11 @@ struct Vec3T {
   Vec3T<T> cross(Vec3T<T> other) {
     Vec3T<T> out;
     // i x j = k
-    out.z = this->x * other.y;
+    out.z = this->x * other.y - this->y * other.x;
     // j x k = i
-    out.x = this->y * other.z;
+    out.x = this->y * other.z - this->z * other.y;
     // k x i = j
-    out.y = this->z * other.x;
+    out.y = this->z * other.x - this->x * other.z;
     return out;
   }
 
@@ -608,7 +608,7 @@ std::optional<Vec3f> bary(Vec2i out, Vec2i v1, Vec2i v2, Vec2i v3) {
   Vec2f residual;
   residual = wout *1. - (w1 * a + w2 * b);
 
-  cout << "\t" << wout << " =?= " << w1 << "*" << a << " + " << w2 << "*" << b << " | " << residual << "\n";
+  // cout << "\t" << wout << " =?= " << w1 << "*" << a << " + " << w2 << "*" << b << " | " << residual << "\n";
   assert(residual.len() < 1);
 
   float c = 1 - a - b;
@@ -781,7 +781,7 @@ const int INFTY = 1e9;
     cout << "\n";
   }
 
-  write_image_to_ppm(image, "out.ppm");
+  write_image_to_ppm(image, "ch3.ppm");
 }
 
 
@@ -818,6 +818,7 @@ struct Matrix {
     Matrix out(this->nrows, other.ncols);
     for(int i = 0; i < this->nrows; ++i) {
       for(int j = 0; j < other.ncols; ++j) {
+        out(i, j) = 0;
         for(int k = 0; k < this->ncols; ++k) {
           out(i, j) += (*this)(i, k) * other(k, j);
         }
@@ -827,11 +828,12 @@ struct Matrix {
   }
 
   template<typename T>
-  Vec4T<float> operator * (const Vec4T<T> other) {
+  Vec4T<float> operator * (const Vec4T<T> other) const {
     assert(this->nrows == 4);
     assert(this->ncols == 4);
     Vec4T<float> out;
     for(int i = 0; i < this->nrows; ++i) {
+      out(i) = 0;
         for(int k = 0; k < this->ncols; ++k) {
           out(i) += (*this)(i, k) * other(k);
         }
@@ -1034,7 +1036,7 @@ const int height = 800;
 const int INFTY = 1e9;
   Model model = parse_model("./obj/african_head/african_head.obj");
   // default look at matrix.
-  Matrix lookM = lookat(Vec3f(0, 0, 0), Vec3f(0, 0, 1), Vec3f(0, 1, 0));
+  Matrix lookM = lookat(Vec3f(0, 0, 0), Vec3f(0, 0, 1), Vec3f(1, 1, 0));
 
   // Model model = parse_model("./obj/tri.obj");
   Image image(width, height, Color::black());
@@ -1056,7 +1058,7 @@ const int INFTY = 1e9;
     Vec2i screen_space_vs[3];
     for(int i = 0; i < 3; ++i) {
       world_space_vs[i] = model.verts[face[i]];
-      view_space_vs[i] = unprojectivize(lookM *projectivize( world_space_vs[i]));
+      view_space_vs[i] = unprojectivize(lookM*projectivize(world_space_vs[i]));
       screen_space_vs[i] = Vec2i((view_space_vs[i].x + 1.) * width/2., (view_space_vs[i].y + 1)*height/2.);
     }
 
@@ -1070,7 +1072,7 @@ const int INFTY = 1e9;
     cout << "\n";
   }
 
-  write_image_to_ppm(image, "out.ppm");
+  write_image_to_ppm(image, "ch4.ppm");
 
 }
 
@@ -1078,9 +1080,9 @@ const int INFTY = 1e9;
 int main(){
   // chapter1();
   // test_bary();
-  test_matinv();
+  // test_matinv();
   // chapter2();
-  // chapter3();
+  chapter3();
   chapter4(); 
   return 0;
 }
