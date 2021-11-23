@@ -1029,6 +1029,9 @@ void test_matinv() {
   }
 };
 
+
+
+
 void chapter4() {
 // Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
 const int width  = 800;
@@ -1077,6 +1080,173 @@ const int INFTY = 1e9;
 }
 
 
+void chapter5() {
+// Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
+const int width  = 800;
+const int height = 800;
+const int INFTY = 1e9;
+  Model model = parse_model("./obj/african_head/african_head.obj");
+  // default look at matrix.
+  Matrix lookM = lookat(Vec3f(0, 0, 0), Vec3f(0, 0, 1), Vec3f(1, 1, 0));
+
+  // Model model = parse_model("./obj/tri.obj");
+  Image image(width, height, Color::black());
+  cout << "model has |" << model.verts.size() << "| vertices\n";
+  cout << "model has |" << model.faces.size() << "| faces\n";
+  const Vec3f light_dir = Vec3f(0, 0, -1).normalize();
+  float *zbuffer = new float[width * height];
+
+  for(int i = 0; i < width * height; ++i) { zbuffer[i] = -INFTY; }
+  for(int f = 0; f < model.faces.size(); ++f) {
+    vector<int> face = model.faces[f];
+    cout << "have face: " << face << " {";
+    for(int j = 0; j < 3; ++j) {
+      cout << model.verts[face[j]] << " ";
+    }
+    cout << "}\n";
+    Vec3f world_space_vs[3];
+    Vec3f view_space_vs[3];
+    Vec2i screen_space_vs[3];
+    for(int i = 0; i < 3; ++i) {
+      world_space_vs[i] = model.verts[face[i]];
+      view_space_vs[i] = unprojectivize(lookM*projectivize(world_space_vs[i]));
+      screen_space_vs[i] = Vec2i((view_space_vs[i].x + 1.) * width/2., (view_space_vs[i].y + 1)*height/2.);
+    }
+
+    // normal for tri.
+    Matrix vp = viewport(0, 0,width, height);
+    Vec3f nhat = (world_space_vs[2] - world_space_vs[0]) ^ (world_space_vs[1] - world_space_vs[0]);
+
+    float intensity = 255 * nhat.normalize().dot(light_dir);
+    if (intensity < 0) { continue; }
+    Color color = Color(intensity, intensity, intensity);
+    trianglez(world_space_vs, screen_space_vs, zbuffer, image, color);
+    cout << "\n";
+  }
+
+  write_image_to_ppm(image, "ch5.ppm");
+}
+
+
+struct IShader {
+    virtual ~IShader() {};
+    virtual Vec2i vertex(int iface, int nthvert) = 0;
+    virtual void fragment(Vec3f bar, Color *outcolor, bool *discard) = 0;
+};
+
+void trianglezshader(Vec3f *vworld, Vec2i *vscreen, float *zbuffer, Image &image, IShader *shader) {
+    AABB2<int> box;
+    box = box.add_point(vscreen[0]);
+    box = box.add_point(vscreen[1]);
+    box = box.add_point(vscreen[2]);
+
+    cout << "box " << box.topleft << " ->" << box.bottomright << "\n";
+    for(int x = box.topleft.x; x <= min<int>(image.w - 1, box.bottomright.x); ++x) {
+      for(int y = box.topleft.y; y <= min<int>(image.h - 1, box.bottomright.y); ++y) {
+        Vec2i cur(x, y);
+        optional<Vec3f> b = bary(cur, vscreen[0], vscreen[1], vscreen[2]);
+        if (!b) { continue; }
+        // Vec2f bcur = v1 * b->x +  v2 * b->y + v3 * b->z;
+        // cout << "\t" << cur << " ~ " << *b << " | " << bcur << "\n";
+        if (b->x < 0 || b->y < 0 || b->z < 0) { continue; }
+
+        // re use barycentric coordinates in screen space on world as 
+        // world -> screen map is linear.
+        float curz = vworld[0].z * b->x + vworld[1].z * b->y + vworld[2].z * b->z;
+        // // write if we are ahead.
+        if (curz > zbuffer[y * image.w + x]) {
+          Color color;
+          bool discard = false;
+          shader->fragment(*b, &color, &discard);
+          if (!discard) {
+            zbuffer[y * image.w + x] = curz;
+            image(cur.x, cur.y) = color;
+          }
+        }
+        // find barycentric coordinates, check if they are all positive
+
+      }
+    }
+    // line(v1, v2, Color::white(), image);
+    // line(v2, v3, Color::white(),  image);
+    // line(v1, v3, Color::white(), image);
+};
+
+struct GouraudShader : public IShader {
+  GouraudShader(Model &model, int width, int height) : model(model), width(width), height(height) {};
+  Model &model;
+  int width, height;
+  Matrix varying_tri = Matrix::identity(3);
+  Vec3f varying_ity;
+
+  virtual Vec2i vertex(int iface, int nthvert) {
+    vector<int> face = model.faces[iface];
+    auto world_space_vs = model.verts[face[nthvert]];
+    // default look at matrix.
+    const Matrix lookM = lookat(Vec3f(0, 0, 0), Vec3f(0, 0, 1), Vec3f(1, 1, 0));
+    auto view_space_vs = unprojectivize(lookM*projectivize(world_space_vs));
+    auto screen_space_vs = Vec2i((view_space_vs.x + 1.) * width/2., (view_space_vs.y + 1)*height/2.);
+    return screen_space_vs;
+  }
+  virtual void fragment(Vec3f bar, Color *outcolor, bool *discard) {
+    *discard = true;
+  }
+
+};
+
+
+void chapter6() {
+// Lesson 1: https://github.com/ssloy/tinyrenderer/tree/f6fecb7ad493264ecd15e230411bfb1cca539a12
+const int width  = 800;
+const int height = 800;
+const int INFTY = 1e9;
+  Model model = parse_model("./obj/african_head/african_head.obj");
+
+  // Model model = parse_model("./obj/tri.obj");
+  Image image(width, height, Color::black());
+  cout << "model has |" << model.verts.size() << "| vertices\n";
+  cout << "model has |" << model.faces.size() << "| faces\n";
+  const Vec3f light_dir = Vec3f(0, 0, -1).normalize();
+  float *zbuffer = new float[width * height];
+
+  GouraudShader *shader = new GouraudShader(model, width, height);
+
+  for(int i = 0; i < width * height; ++i) { zbuffer[i] = -INFTY; }
+  for(int f = 0; f < model.faces.size(); ++f) {
+    vector<int> face = model.faces[f];
+    cout << "have face: " << face << " {";
+    for(int j = 0; j < 3; ++j) {
+      cout << model.verts[face[j]] << " ";
+    }
+    cout << "}\n";
+    Vec3f world_space_vs[3];
+    Vec3f view_space_vs[3];
+    Vec2i screen_space_vs[3];
+    for(int i = 0; i < 3; ++i) {
+      // world_space_vs[i] = model.verts[face[i]];
+      // view_space_vs[i] = unprojectivize(lookM*projectivize(world_space_vs[i]));
+      // screen_space_vs[i] = Vec2i((view_space_vs[i].x + 1.) * width/2., (view_space_vs[i].y + 1)*height/2.);
+      screen_space_vs[i] = shader->vertex(f, i);
+
+    }
+
+    // normal for tri.
+    Matrix vp = viewport(0, 0,width, height);
+    Vec3f nhat = (world_space_vs[2] - world_space_vs[0]) ^ (world_space_vs[1] - world_space_vs[0]);
+
+    float intensity = 255 * nhat.normalize().dot(light_dir);
+    if (intensity < 0) { continue; }
+    Color color = Color(intensity, intensity, intensity);
+    trianglez(world_space_vs, screen_space_vs, zbuffer, image, color);
+    cout << "\n";
+  }
+
+  write_image_to_ppm(image, "ch6.ppm");
+}
+
+
+
+
 int main(){
   // chapter1();
   // test_bary();
@@ -1084,5 +1254,7 @@ int main(){
   // chapter2();
   chapter3();
   chapter4(); 
+  chapter5(); 
+  chapter6(); 
   return 0;
 }
